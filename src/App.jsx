@@ -1,6 +1,6 @@
 import { useState } from "react";
-import AuthComponent from "./auth/AuthComponent";
-import CylinderApp from "./cylinder/CylinderApp";
+import AuthComponent from "./AuthComponent";
+import CylinderApp from "./CylinderApp";
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem("access_token"));
