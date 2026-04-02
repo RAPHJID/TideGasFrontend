@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const API = "https://localhost:7139"; // 👈 change to your CylinderService port
+const API = "https://localhost:7139";
 
 function getToken() { return localStorage.getItem("access_token"); }
 function getRoles() { try { return JSON.parse(localStorage.getItem("roles")) || []; } catch { return []; } }
