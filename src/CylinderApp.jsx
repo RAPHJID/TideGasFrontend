@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const API = "https://localhost:7139";
 
@@ -23,6 +23,21 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
+// image upload uses multipart/form-data so we handle it separately
+async function uploadImage(id, file) {
+  const token = getToken();
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API}/api/Cylinder/${id}/upload-image`, {
+    method: "POST",
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: form,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || "Upload failed");
+  return data;
+}
+
 const css = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'DM Sans', 'Helvetica Neue', sans-serif; background: #f7f7f5; color: #111; }
@@ -42,25 +57,34 @@ const css = `
   .tab { padding: 7px 18px; font-size: 13px; font-weight: 500; border: none; border-radius: 7px; cursor: pointer; background: transparent; color: #999; font-family: inherit; }
   .tab.active { background: #fff; color: #111; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
-  .card { background: #fff; border: 0.5px solid #e2e2de; border-radius: 14px; padding: 1.25rem; }
+  .card { background: #fff; border: 0.5px solid #e2e2de; border-radius: 14px; overflow: hidden; }
+  .card-img { width: 100%; height: 160px; object-fit: cover; background: #f2f2f0; display: block; }
+  .card-img-placeholder { width: 100%; height: 160px; background: #f7f7f5; border-bottom: 0.5px solid #e2e2de; display: flex; align-items: center; justify-content: center; color: #ccc; font-size: 13px; flex-direction: column; gap: 8px; cursor: pointer; transition: background 0.15s; }
+  .card-img-placeholder:hover { background: #f0f0ee; }
+  .card-body { padding: 1.25rem; }
   .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
   .card-title { font-size: 15px; font-weight: 500; }
   .card-sub { font-size: 12px; color: #999; margin-top: 2px; }
   .badge { display: inline-block; padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 500; border: 0.5px solid; }
   .meta { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-  .meta-row { display: flex; justify-content: space-between; font-size: 13px; }
+  .meta-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
   .meta-row span:first-child { color: #999; }
-  .card-actions { display: flex; gap: 6px; flex-wrap: wrap; border-top: 0.5px solid #f0f0ee; padding-top: 12px; margin-top: 4px; }
+  .card-actions { display: flex; gap: 6px; flex-wrap: wrap; border-top: 0.5px solid #f0f0ee; padding-top: 12px; }
   .empty { text-align: center; padding: 4rem 2rem; color: #bbb; font-size: 14px; }
   .error-box { background: #fff0f0; border: 0.5px solid #fcc; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #c00; margin-bottom: 1rem; }
   .success-box { background: #f0faf4; border: 0.5px solid #b2dfc4; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #1a7f4b; margin-bottom: 1rem; }
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 1rem; }
-  .modal { background: #fff; border-radius: 16px; padding: 2rem; width: 100%; max-width: 400px; border: 0.5px solid #e2e2de; }
+  .modal { background: #fff; border-radius: 16px; padding: 2rem; width: 100%; max-width: 420px; border: 0.5px solid #e2e2de; max-height: 90vh; overflow-y: auto; }
   .modal h2 { font-size: 17px; font-weight: 500; margin-bottom: 1.25rem; }
   .field { margin-bottom: 1rem; }
   .field label { display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 6px; }
   .field input, .field select { width: 100%; padding: 10px 12px; font-size: 14px; border: 0.5px solid #ddd; border-radius: 8px; outline: none; font-family: inherit; color: #111; background: #fff; }
   .field input:focus, .field select:focus { border-color: #111; }
+  .upload-area { border: 0.5px dashed #ddd; border-radius: 8px; padding: 1.5rem; text-align: center; cursor: pointer; transition: all 0.15s; background: #fafafa; }
+  .upload-area:hover { background: #f2f2f0; border-color: #bbb; }
+  .upload-area.dragover { background: #f0faf4; border-color: #1a7f4b; }
+  .upload-preview { width: 100%; height: 140px; object-fit: cover; border-radius: 8px; margin-top: 10px; display: block; }
+  .upload-hint { font-size: 12px; color: #999; margin-top: 6px; }
   .modal-actions { display: flex; gap: 8px; margin-top: 1.25rem; }
   .modal-actions .btn { flex: 1; }
   .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
@@ -71,7 +95,30 @@ const css = `
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 4rem; color: #999; font-size: 14px; }
   .role-badge { background: #f2f2f0; border: 0.5px solid #e0e0dc; border-radius: 4px; font-size: 11px; padding: 2px 6px; color: #555; text-transform: uppercase; letter-spacing: 0.4px; margin-left: 4px; }
+  .img-overlay { position: relative; }
+  .img-overlay:hover .img-change-btn { opacity: 1; }
+  .img-change-btn { position: absolute; bottom: 8px; right: 8px; opacity: 0; transition: opacity 0.2s; background: rgba(0,0,0,0.6); color: #fff; border: none; border-radius: 6px; padding: 5px 10px; font-size: 11px; cursor: pointer; font-family: inherit; }
 `;
+
+function statusStyle(status) {
+  const map = {
+    Available:   { bg: "#f0faf4", border: "#b2dfc4", color: "#1a7f4b" },
+    InUse:       { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" },
+    UnderRefill: { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" },
+    Damaged:     { bg: "#fff0f0", border: "#fcc",    color: "#c00"    },
+  };
+  return map[status] || { bg: "#f2f2f0", border: "#e0e0dc", color: "#555" };
+}
+
+function conditionStyle(condition) {
+  const map = {
+    New:     { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" },
+    Good:    { bg: "#f0faf4", border: "#b2dfc4", color: "#1a7f4b" },
+    Fair:    { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" },
+    Damaged: { bg: "#fff0f0", border: "#fcc",    color: "#c00"    },
+  };
+  return map[condition] || { bg: "#f2f2f0", border: "#e0e0dc", color: "#555" };
+}
 
 // ── ADD / EDIT MODAL ──────────────────────────────────────────────────────────
 function CylinderModal({ cylinder, onClose, onSaved }) {
@@ -82,30 +129,40 @@ function CylinderModal({ cylinder, onClose, onSaved }) {
     status: cylinder?.status || "Available",
     condition: cylinder?.condition || "Good",
   });
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(cylinder?.imageUrl ? `${API}${cylinder.imageUrl}` : null);
+  const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const fileRef = useRef();
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  function handleFile(file) {
+    if (!file) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) { setError("Only JPG, PNG or WEBP allowed."); return; }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setError("");
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    if (!form.brand || !form.size) {
-      setError("Brand and size are required.");
-      return;
-    }
+    if (!form.brand || !form.size) { setError("Brand and size are required."); return; }
     setLoading(true);
     try {
+      let savedId = cylinder?.id;
       if (isEdit) {
-        await apiFetch(`/api/Cylinder/${cylinder.id}`, {
-          method: "PUT",
-          body: JSON.stringify(form),
-        });
+        await apiFetch(`/api/Cylinder/${cylinder.id}`, { method: "PUT", body: JSON.stringify(form) });
       } else {
-        await apiFetch("/api/Cylinder", {
-          method: "POST",
-          body: JSON.stringify(form),
-        });
+        const data = await apiFetch("/api/Cylinder", { method: "POST", body: JSON.stringify(form) });
+        savedId = data?.id;
+      }
+      // upload image if a file was selected
+      if (imageFile && savedId) {
+        await uploadImage(savedId, imageFile);
       }
       onSaved();
     } catch (err) {
@@ -147,6 +204,36 @@ function CylinderModal({ cylinder, onClose, onSaved }) {
               <option>Damaged</option>
             </select>
           </div>
+
+          {/* IMAGE UPLOAD */}
+          <div className="field">
+            <label>Photo</label>
+            <div
+              className={`upload-area ${dragOver ? "dragover" : ""}`}
+              onClick={() => fileRef.current.click()}
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
+            >
+              {imagePreview ? (
+                <img src={imagePreview} alt="preview" className="upload-preview" />
+              ) : (
+                <>
+                  <div style={{ fontSize: 24 }}>📷</div>
+                  <div style={{ fontSize: 13, color: "#999", marginTop: 6 }}>Click or drag to upload</div>
+                </>
+              )}
+              <div className="upload-hint">JPG, PNG or WEBP</div>
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              style={{ display: "none" }}
+              onChange={e => handleFile(e.target.files[0])}
+            />
+          </div>
+
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-dark" disabled={loading}>
@@ -209,67 +296,82 @@ function DailySalesModal({ cylinder, onClose, onSaved }) {
 }
 
 // ── CYLINDER CARD ─────────────────────────────────────────────────────────────
-function statusStyle(status) {
-  const map = {
-    Available:   { bg: "#f0faf4", border: "#b2dfc4", color: "#1a7f4b" },
-    InUse:       { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" },
-    UnderRefill: { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" },
-    Damaged:     { bg: "#fff0f0", border: "#fcc",    color: "#c00"    },
-  };
-  return map[status] || { bg: "#f2f2f0", border: "#e0e0dc", color: "#555" };
-}
-
-function conditionStyle(condition) {
-  const map = {
-    New:     { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" },
-    Good:    { bg: "#f0faf4", border: "#b2dfc4", color: "#1a7f4b" },
-    Fair:    { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" },
-    Damaged: { bg: "#fff0f0", border: "#fcc",    color: "#c00"    },
-  };
-  return map[condition] || { bg: "#f2f2f0", border: "#e0e0dc", color: "#555" };
-}
-
-function CylinderCard({ cylinder, onEdit, onDelete, onSales }) {
+function CylinderCard({ cylinder, onEdit, onDelete, onSales, onImageChange }) {
   const st = statusStyle(cylinder.status);
   const ct = conditionStyle(cylinder.condition);
+  const fileRef = useRef();
+
+  function handleFileChange(e) {
+    const file = e.target.files[0];
+    if (file) onImageChange(cylinder.id, file);
+  }
+
   return (
     <div className="card">
-      <div className="card-header">
-        <div>
-          <div className="card-title">{cylinder.brand}</div>
-          <div className="card-sub">{cylinder.size}</div>
-        </div>
-        <span className="badge" style={{ background: st.bg, borderColor: st.border, color: st.color }}>
-          {cylinder.status}
-        </span>
-      </div>
-      <div className="meta">
-        <div className="meta-row">
-          <span>Condition</span>
-          <span className="badge" style={{ background: ct.bg, borderColor: ct.border, color: ct.color }}>
-            {cylinder.condition}
-          </span>
-        </div>
-        {cylinder.quantitySoldToday != null && (
-          <div className="meta-row"><span>Sold today</span><span>{cylinder.quantitySoldToday}</span></div>
+      {/* IMAGE */}
+      <div className="img-overlay">
+        {cylinder.imageUrl ? (
+          <img src={`${API}${cylinder.imageUrl}`} alt={cylinder.brand} className="card-img" />
+        ) : (
+          <div className="card-img-placeholder" onClick={() => isAdmin() && fileRef.current.click()}>
+            <span style={{ fontSize: 28 }}>📷</span>
+            {isAdmin() && <span style={{ fontSize: 12 }}>Click to add photo</span>}
+          </div>
         )}
-      </div>
-      <div className="card-actions">
-        {isAdminOrStaff() && (
-          <button className="btn" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => onSales(cylinder)}>
-            Daily sales
+        {/* change photo button on hover (admin only) */}
+        {isAdmin() && cylinder.imageUrl && (
+          <button className="img-change-btn" onClick={() => fileRef.current.click()}>
+            Change photo
           </button>
         )}
-        {isAdmin() && (
-          <>
-            <button className="btn" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => onEdit(cylinder)}>
-              Edit
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+        />
+      </div>
+
+      {/* BODY */}
+      <div className="card-body">
+        <div className="card-header">
+          <div>
+            <div className="card-title">{cylinder.brand}</div>
+            <div className="card-sub">{cylinder.size}</div>
+          </div>
+          <span className="badge" style={{ background: st.bg, borderColor: st.border, color: st.color }}>
+            {cylinder.status}
+          </span>
+        </div>
+        <div className="meta">
+          <div className="meta-row">
+            <span>Condition</span>
+            <span className="badge" style={{ background: ct.bg, borderColor: ct.border, color: ct.color }}>
+              {cylinder.condition}
+            </span>
+          </div>
+          {cylinder.quantitySoldToday != null && (
+            <div className="meta-row"><span>Sold today</span><span>{cylinder.quantitySoldToday}</span></div>
+          )}
+        </div>
+        <div className="card-actions">
+          {isAdminOrStaff() && (
+            <button className="btn" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => onSales(cylinder)}>
+              Daily sales
             </button>
-            <button className="btn btn-danger" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => onDelete(cylinder.id)}>
-              Delete
-            </button>
-          </>
-        )}
+          )}
+          {isAdmin() && (
+            <>
+              <button className="btn" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => onEdit(cylinder)}>
+                Edit
+              </button>
+              <button className="btn btn-danger" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => onDelete(cylinder.id)}>
+                Delete
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -315,6 +417,17 @@ export default function CylinderApp({ onLogout }) {
     }
   }
 
+  async function handleImageChange(id, file) {
+    try {
+      await uploadImage(id, file);
+      setSuccess("Photo updated.");
+      setTimeout(() => setSuccess(""), 2500);
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   function handleSaved() {
     setModal(null);
     setSelected(null);
@@ -336,7 +449,6 @@ export default function CylinderApp({ onLogout }) {
     <>
       <style>{css}</style>
       <div className="app">
-
         {/* TOPBAR */}
         <div className="topbar">
           <div className="topbar-left">
@@ -391,6 +503,7 @@ export default function CylinderApp({ onLogout }) {
                 onEdit={cyl => { setSelected(cyl); setModal("edit"); }}
                 onDelete={handleDelete}
                 onSales={cyl => { setSelected(cyl); setModal("sales"); }}
+                onImageChange={handleImageChange}
               />
             ))}
           </div>
