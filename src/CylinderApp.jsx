@@ -35,7 +35,9 @@ async function uploadImage(id, file) {
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: form,
   });
-  const data = await res.json();
+  const text = await res.text();        
+  if (!text) return null;               
+  const data = JSON.parse(text);        
   if (!res.ok) throw new Error(data.message || "Upload failed");
   return data;
 }
