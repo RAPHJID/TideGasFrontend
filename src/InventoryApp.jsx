@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const API = "https://localhost:7289"; // 👈 change to your InventoryService port
+const API = "https://localhost:7037"; 
 
 function getToken() { return localStorage.getItem("access_token"); }
 function getRoles() { try { return JSON.parse(localStorage.getItem("roles")) || []; } catch { return []; } }
