@@ -2,6 +2,9 @@ import { useState } from "react";
 import AuthComponent from "./AuthComponent";
 import CylinderApp from "./CylinderApp";
 import CustomerApp from "./CustomerApp";
+import OrderApp from "./OrderApp";
+
+
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem("access_token"));
@@ -29,6 +32,7 @@ export default function App() {
         {[
           { key: "cylinders", label: "Cylinders" },
           { key: "customers", label: "Customers" },
+          { key: "orders", label: "Orders" },
         ].map(item => (
           <button key={item.key} onClick={() => setPage(item.key)} style={{
             padding: "6px 14px", fontSize: 13, fontWeight: 500,
@@ -45,6 +49,7 @@ export default function App() {
       {/* PAGES */}
       {page === "cylinders" && <CylinderApp onLogout={handleLogout} />}
       {page === "customers" && <CustomerApp onLogout={handleLogout} />}
+      {page === "orders" && <OrderApp onLogout={handleLogout} />}
     </>
   );
 }
