@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
-
-const API = "https://localhost:7037"; 
+const INVENTORY_API = "https://localhost:7037"; 
+const CYLINDER_API  = "https://localhost:7139"; 
 
 function getToken() { return localStorage.getItem("access_token"); }
 function getRoles() { try { return JSON.parse(localStorage.getItem("roles")) || []; } catch { return []; } }
 function isAdmin() { return getRoles().includes("Admin"); }
 function isAdminOrStaff() { return getRoles().some(r => ["Admin", "Staff"].includes(r)); }
 
-async function apiFetch(path, options = {}) {
+async function apiFetch(base, path, options = {}) {
   const token = getToken();
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetch(`${base}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -108,7 +108,7 @@ function CreateInventoryModal({ cylinders, onClose, onSaved }) {
     setLoading(true);
     try {
       // POST /api/Inventory/{cylinderId}?quantity=N
-      await apiFetch(`/api/Inventory/${cylinderId}?quantity=${quantity}`, { method: "POST" });
+      await apiFetch(INVENTORY_API, `/api/Inventory/${cylinderId}?quantity=${quantity}`, { method: "POST" });
       onSaved();
     } catch (err) {
       setError(err.message);
@@ -162,7 +162,7 @@ function AdjustModal({ item, onClose, onSaved }) {
     setLoading(true);
     try {
       // PATCH /api/Inventory/{cylinderId}/adjust?quantityChange=N
-      await apiFetch(`/api/Inventory/${item.cylinderId}/adjust?quantityChange=${val}`, { method: "PATCH" });
+      await apiFetch(INVENTORY_API, `/api/Inventory/${item.cylinderId}/adjust?quantityChange=${val}`, { method: "PATCH" });
       onSaved();
     } catch (err) {
       setError(err.message);
@@ -215,22 +215,22 @@ export default function InventoryApp({ onLogout }) {
   const roles = getRoles();
   const userEmail = (() => { try { return JSON.parse(localStorage.getItem("user"))?.email || ""; } catch { return ""; } })();
 
-  async function load() {
-    setLoading(true);
-    setError("");
-    try {
-      const [invData, cylData] = await Promise.all([
-        apiFetch("/api/Inventory"),
-        apiFetch("/api/Cylinder/all"), // to populate create modal dropdown
-      ]);
-      setInventory(invData || []);
-      setCylinders(cylData || []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+async function load() {
+  setLoading(true);
+  setError("");
+  try {
+    const [invData, cylData] = await Promise.all([
+      apiFetch(INVENTORY_API, "/api/Inventory"),
+      apiFetch(CYLINDER_API,  "/api/Cylinder/all"),
+    ]);
+    setInventory(invData || []);
+    setCylinders(cylData || []);
+  } catch (err) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
   }
+}
 
   useEffect(() => { load(); }, []);
 
@@ -238,7 +238,7 @@ export default function InventoryApp({ onLogout }) {
     if (!window.confirm("Delete this inventory record?")) return;
     try {
       // DELETE /api/Inventory/{cylinderId}
-      await apiFetch(`/api/Inventory/${cylinderId}`, { method: "DELETE" });
+      await apiFetch(INVENTORY_API, `/api/Inventory/${cylinderId}`, { method: "DELETE" });
       setSuccess("Inventory deleted.");
       setTimeout(() => setSuccess(""), 2500);
       load();
