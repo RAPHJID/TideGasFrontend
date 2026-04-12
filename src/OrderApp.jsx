@@ -10,9 +10,9 @@ function getRoles() { try { return JSON.parse(localStorage.getItem("roles")) || 
 function isAdmin() { return getRoles().includes("Admin"); }
 function isAdminOrStaff() { return getRoles().some(r => ["Admin", "Staff"].includes(r)); }
 
-async function apiFetch(baseUrl, path, options = {}) {
+async function apiFetch(base, path, options = {}) {
   const token = getToken();
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await fetch(`${base}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -23,11 +23,16 @@ async function apiFetch(baseUrl, path, options = {}) {
   if (res.status === 204) return null;
   const text = await res.text();
   if (!text) return null;
-  const data = JSON.parse(text);
-  if (!res.ok) throw new Error(data.message || data.title || "Request failed");
-  return data;
+  try {
+    const data = JSON.parse(text);
+    if (!res.ok) throw new Error(data.message || data.title || "Request failed");
+    return data;
+  } catch {
+    // server returned plain text instead of JSON
+    if (!res.ok) throw new Error(text.replace(/^"(.*)"$/, "$1").slice(0, 200));
+    return text;
+  }
 }
-
 const STATUS_STYLES = {
   Pending:    { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" },
   Processing: { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" },
