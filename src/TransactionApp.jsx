@@ -1,15 +1,17 @@
 import { useState, useEffect } from "react";
 
-const API = "https://localhost:7267"; 
+const TRANSACTION_API = "https://localhost:7267"; 
+const CUSTOMER_API    = "https://localhost:7261"; 
+const CYLINDER_API    = "https://localhost:7139"; 
 
 function getToken() { return localStorage.getItem("access_token"); }
 function getRoles() { try { return JSON.parse(localStorage.getItem("roles")) || []; } catch { return []; } }
 function isAdmin() { return getRoles().includes("Admin"); }
 function isAdminOrStaff() { return getRoles().some(r => ["Admin", "Staff"].includes(r)); }
 
-async function apiFetch(path, options = {}) {
+async function apiFetch(base, path, options = {}) {
   const token = getToken();
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetch(`${base}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -20,9 +22,14 @@ async function apiFetch(path, options = {}) {
   if (res.status === 204) return null;
   const text = await res.text();
   if (!text) return null;
-  const data = JSON.parse(text);
-  if (!res.ok) throw new Error(data.message || data.title || data || "Request failed");
-  return data;
+  try {
+    const data = JSON.parse(text);
+    if (!res.ok) throw new Error(data.message || data.title || "Request failed");
+    return data;
+  } catch {
+    if (!res.ok) throw new Error(text.replace(/^"(.*)"$/, "$1").slice(0, 200));
+    return text;
+  }
 }
 
 const css = `
@@ -75,92 +82,8 @@ const css = `
   .detail-row span:first-child { color: #999; }
   .detail-row span:last-child { font-weight: 500; }
   .amount-positive { color: #1a7f4b; font-weight: 500; }
+  .info-note { background: #f0faf4; border: 0.5px solid #b2dfc4; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #1a7f4b; margin-bottom: 1.5rem; }
 `;
-
-// ── CREATE TRANSACTION MODAL ───────────────────────────────────────────────────
-function CreateTransactionModal({ customers, cylinders, onClose, onSaved }) {
-  const [form, setForm] = useState({
-    customerId: "",
-    cylinderId: "",
-    date: new Date().toISOString().slice(0, 16),
-    amount: "",
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    if (!form.customerId || !form.cylinderId || !form.amount) {
-      setError("Please fill in all fields.");
-      return;
-    }
-    setLoading(true);
-    try {
-      // POST /api/Transaction
-      // Body: CreateUpdateTransactionDTO { customerId, cylinderId, date, amount }
-      await apiFetch("/api/Transaction", {
-        method: "POST",
-        body: JSON.stringify({
-          customerId: form.customerId,
-          cylinderId: form.cylinderId,
-          date: new Date(form.date).toISOString(),
-          amount: parseFloat(form.amount),
-        }),
-      });
-      onSaved();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <h2>New transaction</h2>
-        {error && <div className="error-box">{error}</div>}
-        <form onSubmit={handleSubmit}>
-          <div className="field">
-            <label>Customer</label>
-            <select value={form.customerId} onChange={e => set("customerId", e.target.value)}>
-              <option value="">Select a customer…</option>
-              {customers.map(c => (
-                <option key={c.id} value={c.id}>{c.fullName} — {c.email}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>Cylinder</label>
-            <select value={form.cylinderId} onChange={e => set("cylinderId", e.target.value)}>
-              <option value="">Select a cylinder…</option>
-              {cylinders.map(c => (
-                <option key={c.id} value={c.id}>{c.brand} — {c.size}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>Date</label>
-            <input type="datetime-local" value={form.date} onChange={e => set("date", e.target.value)} />
-          </div>
-          <div className="field">
-            <label>Amount (QAR)</label>
-            <input type="number" value={form.amount} onChange={e => set("amount", e.target.value)} placeholder="0.00" step="0.01" />
-          </div>
-          <div className="modal-actions">
-            <button type="button" className="btn" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-dark" disabled={loading}>
-              {loading ? "Saving…" : "Create transaction"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 // ── DETAIL MODAL ──────────────────────────────────────────────────────────────
 function TransactionDetail({ tx, onClose, onDelete }) {
@@ -173,12 +96,17 @@ function TransactionDetail({ tx, onClose, onDelete }) {
           <div className="detail-row"><span>Customer</span><span>{tx.customerName || tx.customerId}</span></div>
           <div className="detail-row"><span>Cylinder</span><span>{tx.cylinderName || tx.cylinderId}</span></div>
           <div className="detail-row"><span>Date</span><span>{new Date(tx.date).toLocaleString()}</span></div>
-          <div className="detail-row"><span>Amount</span><span className="amount-positive">QAR {Number(tx.amount).toFixed(2)}</span></div>
+          <div className="detail-row">
+            <span>Amount</span>
+            <span className="amount-positive">QAR {Number(tx.amount).toFixed(2)}</span>
+          </div>
         </div>
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Close</button>
           {isAdmin() && (
-            <button className="btn btn-danger" onClick={() => { onClose(); onDelete(tx.id); }}>Delete</button>
+            <button className="btn btn-danger" onClick={() => { onClose(); onDelete(tx.id); }}>
+              Delete
+            </button>
           )}
         </div>
       </div>
@@ -189,8 +117,6 @@ function TransactionDetail({ tx, onClose, onDelete }) {
 // ── MAIN ──────────────────────────────────────────────────────────────────────
 export default function TransactionApp({ onLogout }) {
   const [transactions, setTransactions] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [cylinders, setCylinders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -199,20 +125,17 @@ export default function TransactionApp({ onLogout }) {
   const [selected, setSelected] = useState(null);
 
   const roles = getRoles();
-  const userEmail = (() => { try { return JSON.parse(localStorage.getItem("user"))?.email || ""; } catch { return ""; } })();
+  const userEmail = (() => {
+    try { return JSON.parse(localStorage.getItem("user"))?.email || ""; } catch { return ""; }
+  })();
 
   async function load() {
     setLoading(true);
     setError("");
     try {
-      const [txData, custData, cylData] = await Promise.all([
-        apiFetch("/api/Transaction"),
-        apiFetch("/api/customer"),
-        apiFetch("/api/Cylinder/all"),
-      ]);
+      // only call TransactionService — transactions already have customerName + cylinderName enriched
+      const txData = await apiFetch(TRANSACTION_API, "/api/Transaction");
       setTransactions(txData || []);
-      setCustomers(custData || []);
-      setCylinders(cylData || []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -225,20 +148,13 @@ export default function TransactionApp({ onLogout }) {
   async function handleDelete(id) {
     if (!window.confirm("Delete this transaction?")) return;
     try {
-      await apiFetch(`/api/Transaction/${id}`, { method: "DELETE" });
+      await apiFetch(TRANSACTION_API, `/api/Transaction/${id}`, { method: "DELETE" });
       setSuccess("Transaction deleted.");
       setTimeout(() => setSuccess(""), 2500);
       load();
     } catch (err) {
       setError(err.message);
     }
-  }
-
-  function handleSaved() {
-    setModal(null);
-    setSuccess("Transaction created.");
-    setTimeout(() => setSuccess(""), 2500);
-    load();
   }
 
   const filtered = transactions.filter(t =>
@@ -268,20 +184,31 @@ export default function TransactionApp({ onLogout }) {
           </div>
           <div className="topbar-right">
             <button className="btn" onClick={load}>Refresh</button>
-            {isAdminOrStaff() && (
-              <button className="btn btn-dark" onClick={() => setModal("create")}>
-                + New transaction
-              </button>
-            )}
             <button className="btn" onClick={onLogout}>Sign out</button>
           </div>
         </div>
 
+        {/* INFO NOTE */}
+        <div className="info-note">
+          Transactions are created automatically when an order is placed. No manual entry needed.
+        </div>
+
         {/* STATS */}
         <div className="stat-row">
-          <div className="stat"><div className="stat-label">Total transactions</div><div className="stat-value">{transactions.length}</div></div>
-          <div className="stat"><div className="stat-label">Total revenue</div><div className="stat-value" style={{ fontSize: 18 }}>QAR {totalRevenue.toFixed(2)}</div></div>
-          <div className="stat"><div className="stat-label">Today's revenue</div><div className="stat-value" style={{ fontSize: 18, color: "#1a7f4b" }}>QAR {todayRevenue.toFixed(2)}</div></div>
+          <div className="stat">
+            <div className="stat-label">Total transactions</div>
+            <div className="stat-value">{transactions.length}</div>
+          </div>
+          <div className="stat">
+            <div className="stat-label">Total revenue</div>
+            <div className="stat-value" style={{ fontSize: 18 }}>QAR {totalRevenue.toFixed(2)}</div>
+          </div>
+          <div className="stat">
+            <div className="stat-label">Today's revenue</div>
+            <div className="stat-value" style={{ fontSize: 18, color: "#1a7f4b" }}>
+              QAR {todayRevenue.toFixed(2)}
+            </div>
+          </div>
         </div>
 
         {error && <div className="error-box">{error}</div>}
@@ -300,7 +227,9 @@ export default function TransactionApp({ onLogout }) {
         {loading ? (
           <div className="loading"><div className="spinner" /> Loading transactions…</div>
         ) : filtered.length === 0 ? (
-          <div className="empty">{search ? "No transactions match your search." : "No transactions yet."}</div>
+          <div className="empty">
+            {search ? "No transactions match your search." : "No transactions yet. Create an order to generate one."}
+          </div>
         ) : (
           <div className="table-wrap">
             <table>
@@ -325,12 +254,17 @@ export default function TransactionApp({ onLogout }) {
                       </span>
                     </td>
                     <td style={{ color: "#555" }}>{t.cylinderName || "—"}</td>
-                    <td style={{ color: "#999", fontSize: 12 }}>{new Date(t.date).toLocaleDateString()}</td>
+                    <td style={{ color: "#999", fontSize: 12 }}>
+                      {new Date(t.date).toLocaleDateString()}
+                    </td>
                     <td className="amount-positive">QAR {Number(t.amount).toFixed(2)}</td>
                     {isAdmin() && (
                       <td>
-                        <button className="btn btn-danger" style={{ fontSize: 12, padding: "5px 10px" }}
-                          onClick={() => handleDelete(t.id)}>
+                        <button
+                          className="btn btn-danger"
+                          style={{ fontSize: 12, padding: "5px 10px" }}
+                          onClick={() => handleDelete(t.id)}
+                        >
                           Delete
                         </button>
                       </td>
@@ -343,14 +277,6 @@ export default function TransactionApp({ onLogout }) {
         )}
       </div>
 
-      {modal === "create" && (
-        <CreateTransactionModal
-          customers={customers}
-          cylinders={cylinders}
-          onClose={() => setModal(null)}
-          onSaved={handleSaved}
-        />
-      )}
       {modal === "detail" && selected && (
         <TransactionDetail
           tx={selected}
