@@ -1,36 +1,5 @@
 import { useState, useEffect } from "react";
-
-const TRANSACTION_API = "https://localhost:7267"; 
-const CUSTOMER_API    = "https://localhost:7261"; 
-const CYLINDER_API    = "https://localhost:7139"; 
-
-function getToken() { return localStorage.getItem("access_token"); }
-function getRoles() { try { return JSON.parse(localStorage.getItem("roles")) || []; } catch { return []; } }
-function isAdmin() { return getRoles().includes("Admin"); }
-function isAdminOrStaff() { return getRoles().some(r => ["Admin", "Staff"].includes(r)); }
-
-async function apiFetch(base, path, options = {}) {
-  const token = getToken();
-  const res = await fetch(`${base}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-  if (res.status === 204) return null;
-  const text = await res.text();
-  if (!text) return null;
-  try {
-    const data = JSON.parse(text);
-    if (!res.ok) throw new Error(data.message || data.title || "Request failed");
-    return data;
-  } catch {
-    if (!res.ok) throw new Error(text.replace(/^"(.*)"$/, "$1").slice(0, 200));
-    return text;
-  }
-}
+import { apiFetch, TRANSACTION_API, getRoles, getUserEmail, isAdmin } from "./config";
 
 const css = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -46,8 +15,7 @@ const css = `
   .btn-dark:hover { background: #333; }
   .btn-danger { background: #fff0f0; color: #c00; border-color: #fcc; }
   .btn-danger:hover { background: #ffe0e0; }
-  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-  .search-bar { display: flex; gap: 8px; margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap; }
+  .search-bar { display: flex; gap: 8px; margin-bottom: 1.5rem; }
   .search-bar input { flex: 1; padding: 10px 12px; font-size: 14px; border: 0.5px solid #ddd; border-radius: 8px; outline: none; font-family: inherit; color: #111; background: #fff; max-width: 320px; }
   .search-bar input:focus { border-color: #111; }
   .table-wrap { background: #fff; border: 0.5px solid #e2e2de; border-radius: 14px; overflow: hidden; }
@@ -61,14 +29,8 @@ const css = `
   .error-box { background: #fff0f0; border: 0.5px solid #fcc; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #c00; margin-bottom: 1rem; }
   .success-box { background: #f0faf4; border: 0.5px solid #b2dfc4; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #1a7f4b; margin-bottom: 1rem; }
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 1rem; }
-  .modal { background: #fff; border-radius: 16px; padding: 2rem; width: 100%; max-width: 440px; border: 0.5px solid #e2e2de; max-height: 90vh; overflow-y: auto; }
+  .modal { background: #fff; border-radius: 16px; padding: 2rem; width: 100%; max-width: 440px; border: 0.5px solid #e2e2de; }
   .modal h2 { font-size: 17px; font-weight: 500; margin-bottom: 1.25rem; }
-  .field { margin-bottom: 1rem; }
-  .field label { display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 6px; }
-  .field input, .field select { width: 100%; padding: 10px 12px; font-size: 14px; border: 0.5px solid #ddd; border-radius: 8px; outline: none; font-family: inherit; color: #111; background: #fff; }
-  .field input:focus, .field select:focus { border-color: #111; }
-  .modal-actions { display: flex; gap: 8px; margin-top: 1.25rem; }
-  .modal-actions .btn { flex: 1; }
   .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
   .stat { background: #fff; border: 0.5px solid #e2e2de; border-radius: 12px; padding: 1rem 1.25rem; }
   .stat-label { font-size: 12px; color: #999; margin-bottom: 4px; }
@@ -83,9 +45,10 @@ const css = `
   .detail-row span:last-child { font-weight: 500; }
   .amount-positive { color: #1a7f4b; font-weight: 500; }
   .info-note { background: #f0faf4; border: 0.5px solid #b2dfc4; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #1a7f4b; margin-bottom: 1.5rem; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 1.25rem; }
+  .modal-actions .btn { flex: 1; }
 `;
 
-// ── DETAIL MODAL ──────────────────────────────────────────────────────────────
 function TransactionDetail({ tx, onClose, onDelete }) {
   return (
     <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -96,25 +59,17 @@ function TransactionDetail({ tx, onClose, onDelete }) {
           <div className="detail-row"><span>Customer</span><span>{tx.customerName || tx.customerId}</span></div>
           <div className="detail-row"><span>Cylinder</span><span>{tx.cylinderName || tx.cylinderId}</span></div>
           <div className="detail-row"><span>Date</span><span>{new Date(tx.date).toLocaleString()}</span></div>
-          <div className="detail-row">
-            <span>Amount</span>
-            <span className="amount-positive">QAR {Number(tx.amount).toFixed(2)}</span>
-          </div>
+          <div className="detail-row"><span>Amount</span><span className="amount-positive">QAR {Number(tx.amount).toFixed(2)}</span></div>
         </div>
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Close</button>
-          {isAdmin() && (
-            <button className="btn btn-danger" onClick={() => { onClose(); onDelete(tx.id); }}>
-              Delete
-            </button>
-          )}
+          {isAdmin() && <button className="btn btn-danger" onClick={() => { onClose(); onDelete(tx.id); }}>Delete</button>}
         </div>
       </div>
     </div>
   );
 }
 
-// ── MAIN ──────────────────────────────────────────────────────────────────────
 export default function TransactionApp({ onLogout }) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -123,38 +78,22 @@ export default function TransactionApp({ onLogout }) {
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(null);
   const [selected, setSelected] = useState(null);
-
   const roles = getRoles();
-  const userEmail = (() => {
-    try { return JSON.parse(localStorage.getItem("user"))?.email || ""; } catch { return ""; }
-  })();
+  const userEmail = getUserEmail();
 
   async function load() {
-    setLoading(true);
-    setError("");
-    try {
-      // only call TransactionService — transactions already have customerName + cylinderName enriched
-      const txData = await apiFetch(TRANSACTION_API, "/api/Transaction");
-      setTransactions(txData || []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true); setError("");
+    try { const data = await apiFetch(TRANSACTION_API, "/api/Transaction"); setTransactions(data || []); }
+    catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => { load(); }, []);
 
   async function handleDelete(id) {
     if (!window.confirm("Delete this transaction?")) return;
-    try {
-      await apiFetch(TRANSACTION_API, `/api/Transaction/${id}`, { method: "DELETE" });
-      setSuccess("Transaction deleted.");
-      setTimeout(() => setSuccess(""), 2500);
-      load();
-    } catch (err) {
-      setError(err.message);
-    }
+    try { await apiFetch(TRANSACTION_API, `/api/Transaction/${id}`, { method: "DELETE" }); setSuccess("Transaction deleted."); setTimeout(() => setSuccess(""), 2500); load(); }
+    catch (err) { setError(err.message); }
   }
 
   const filtered = transactions.filter(t =>
@@ -164,126 +103,52 @@ export default function TransactionApp({ onLogout }) {
   );
 
   const totalRevenue = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
-  const todayRevenue = transactions
-    .filter(t => new Date(t.date).toDateString() === new Date().toDateString())
-    .reduce((sum, t) => sum + Number(t.amount), 0);
+  const todayRevenue = transactions.filter(t => new Date(t.date).toDateString() === new Date().toDateString()).reduce((sum, t) => sum + Number(t.amount), 0);
 
   return (
     <>
       <style>{css}</style>
       <div className="app">
-
-        {/* TOPBAR */}
         <div className="topbar">
-          <div className="topbar-left">
-            <h1>Transactions</h1>
-            <p>
-              {userEmail}
-              {roles.map(r => <span key={r} className="role-badge">{r}</span>)}
-            </p>
-          </div>
+          <div className="topbar-left"><h1>Transactions</h1><p>{userEmail}{roles.map(r => <span key={r} className="role-badge">{r}</span>)}</p></div>
           <div className="topbar-right">
             <button className="btn" onClick={load}>Refresh</button>
             <button className="btn" onClick={onLogout}>Sign out</button>
           </div>
         </div>
-
-        {/* INFO NOTE */}
-        <div className="info-note">
-          Transactions are created automatically when an order is placed. No manual entry needed.
-        </div>
-
-        {/* STATS */}
+        <div className="info-note">Transactions are created automatically when an order is placed.</div>
         <div className="stat-row">
-          <div className="stat">
-            <div className="stat-label">Total transactions</div>
-            <div className="stat-value">{transactions.length}</div>
-          </div>
-          <div className="stat">
-            <div className="stat-label">Total revenue</div>
-            <div className="stat-value" style={{ fontSize: 18 }}>QAR {totalRevenue.toFixed(2)}</div>
-          </div>
-          <div className="stat">
-            <div className="stat-label">Today's revenue</div>
-            <div className="stat-value" style={{ fontSize: 18, color: "#1a7f4b" }}>
-              QAR {todayRevenue.toFixed(2)}
-            </div>
-          </div>
+          <div className="stat"><div className="stat-label">Total transactions</div><div className="stat-value">{transactions.length}</div></div>
+          <div className="stat"><div className="stat-label">Total revenue</div><div className="stat-value" style={{ fontSize: 18 }}>QAR {totalRevenue.toFixed(2)}</div></div>
+          <div className="stat"><div className="stat-label">Today's revenue</div><div className="stat-value" style={{ fontSize: 18, color: "#1a7f4b" }}>QAR {todayRevenue.toFixed(2)}</div></div>
         </div>
-
         {error && <div className="error-box">{error}</div>}
         {success && <div className="success-box">{success}</div>}
-
-        {/* SEARCH */}
         <div className="search-bar">
-          <input
-            placeholder="Search by customer, cylinder or ID…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+          <input placeholder="Search by customer, cylinder or ID…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-
-        {/* TABLE */}
-        {loading ? (
-          <div className="loading"><div className="spinner" /> Loading transactions…</div>
-        ) : filtered.length === 0 ? (
-          <div className="empty">
-            {search ? "No transactions match your search." : "No transactions yet. Create an order to generate one."}
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Customer</th>
-                  <th>Cylinder</th>
-                  <th>Date</th>
-                  <th>Amount</th>
-                  {isAdmin() && <th>Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(t => (
-                  <tr key={t.id}>
-                    <td>
-                      <span
-                        style={{ cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2, fontWeight: 500 }}
-                        onClick={() => { setSelected(t); setModal("detail"); }}
-                      >
-                        {t.customerName || "—"}
-                      </span>
-                    </td>
-                    <td style={{ color: "#555" }}>{t.cylinderName || "—"}</td>
-                    <td style={{ color: "#999", fontSize: 12 }}>
-                      {new Date(t.date).toLocaleDateString()}
-                    </td>
-                    <td className="amount-positive">QAR {Number(t.amount).toFixed(2)}</td>
-                    {isAdmin() && (
-                      <td>
-                        <button
-                          className="btn btn-danger"
-                          style={{ fontSize: 12, padding: "5px 10px" }}
-                          onClick={() => handleDelete(t.id)}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {loading ? <div className="loading"><div className="spinner" /> Loading transactions…</div>
+          : filtered.length === 0 ? <div className="empty">{search ? "No transactions match your search." : "No transactions yet. Create an order to generate one."}</div>
+          : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Customer</th><th>Cylinder</th><th>Date</th><th>Amount</th>{isAdmin() && <th>Actions</th>}</tr></thead>
+                <tbody>
+                  {filtered.map(t => (
+                    <tr key={t.id}>
+                      <td><span style={{ cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2, fontWeight: 500 }} onClick={() => { setSelected(t); setModal("detail"); }}>{t.customerName || "—"}</span></td>
+                      <td style={{ color: "#555" }}>{t.cylinderName || "—"}</td>
+                      <td style={{ color: "#999", fontSize: 12 }}>{new Date(t.date).toLocaleDateString()}</td>
+                      <td className="amount-positive">QAR {Number(t.amount).toFixed(2)}</td>
+                      {isAdmin() && <td><button className="btn btn-danger" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => handleDelete(t.id)}>Delete</button></td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
       </div>
-
-      {modal === "detail" && selected && (
-        <TransactionDetail
-          tx={selected}
-          onClose={() => setModal(null)}
-          onDelete={handleDelete}
-        />
-      )}
+      {modal === "detail" && selected && <TransactionDetail tx={selected} onClose={() => setModal(null)} onDelete={handleDelete} />}
     </>
   );
 }

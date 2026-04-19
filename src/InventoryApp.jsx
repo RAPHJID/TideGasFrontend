@@ -1,29 +1,5 @@
 import { useState, useEffect } from "react";
-const INVENTORY_API = "https://localhost:7037"; 
-const CYLINDER_API  = "https://localhost:7139"; 
-
-function getToken() { return localStorage.getItem("access_token"); }
-function getRoles() { try { return JSON.parse(localStorage.getItem("roles")) || []; } catch { return []; } }
-function isAdmin() { return getRoles().includes("Admin"); }
-function isAdminOrStaff() { return getRoles().some(r => ["Admin", "Staff"].includes(r)); }
-
-async function apiFetch(base, path, options = {}) {
-  const token = getToken();
-  const res = await fetch(`${base}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-  if (res.status === 204) return null;
-  const text = await res.text();
-  if (!text) return null;
-  const data = JSON.parse(text);
-  if (!res.ok) throw new Error(data.message || data.title || data || "Request failed");
-  return data;
-}
+import { apiFetch, INVENTORY_API, CYLINDER_API, getRoles, getUserEmail, isAdmin, isAdminOrStaff } from "./config";
 
 const css = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -56,9 +32,7 @@ const css = `
   .stock-bar { height: 6px; border-radius: 4px; background: #1a7f4b; transition: width 0.3s; }
   .stock-bar.low { background: #c00; }
   .stock-bar.mid { background: #7a6000; }
-  .actions { display: flex; gap: 6px; align-items: center; }
-  .adjust-input { width: 70px; padding: 6px 8px; font-size: 13px; border: 0.5px solid #ddd; border-radius: 6px; outline: none; font-family: inherit; text-align: center; }
-  .adjust-input:focus { border-color: #111; }
+  .actions { display: flex; gap: 6px; }
   .empty { text-align: center; padding: 4rem 2rem; color: #bbb; font-size: 14px; }
   .error-box { background: #fff0f0; border: 0.5px solid #fcc; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #c00; margin-bottom: 1rem; }
   .success-box { background: #f0faf4; border: 0.5px solid #b2dfc4; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #1a7f4b; margin-bottom: 1rem; }
@@ -78,23 +52,12 @@ const css = `
   .hint { font-size: 12px; color: #999; margin-top: 6px; }
 `;
 
-function statusStyle(status) {
-  const map = {
-    Available:   { bg: "#f0faf4", border: "#b2dfc4", color: "#1a7f4b" },
-    InUse:       { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" },
-    UnderRefill: { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" },
-    Damaged:     { bg: "#fff0f0", border: "#fcc",    color: "#c00"    },
-  };
-  return map[status] || { bg: "#f2f2f0", border: "#e0e0dc", color: "#555" };
+function statusStyle(s) {
+  const map = { Available: { bg: "#f0faf4", border: "#b2dfc4", color: "#1a7f4b" }, InUse: { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" }, UnderRefill: { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" }, Damaged: { bg: "#fff0f0", border: "#fcc", color: "#c00" } };
+  return map[s] || { bg: "#f2f2f0", border: "#e0e0dc", color: "#555" };
 }
+function stockColor(qty) { if (qty <= 5) return "low"; if (qty <= 20) return "mid"; return ""; }
 
-function stockColor(qty) {
-  if (qty <= 5) return "low";
-  if (qty <= 20) return "mid";
-  return "";
-}
-
-// ── CREATE INVENTORY MODAL (Admin only) ───────────────────────────────────────
 function CreateInventoryModal({ cylinders, onClose, onSaved }) {
   const [cylinderId, setCylinderId] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -102,19 +65,12 @@ function CreateInventoryModal({ cylinders, onClose, onSaved }) {
   const [error, setError] = useState("");
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
+    e.preventDefault(); setError("");
     if (!cylinderId || !quantity) { setError("Please fill in all fields."); return; }
     setLoading(true);
-    try {
-      // POST /api/Inventory/{cylinderId}?quantity=N
-      await apiFetch(INVENTORY_API, `/api/Inventory/${cylinderId}?quantity=${quantity}`, { method: "POST" });
-      onSaved();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    try { await apiFetch(INVENTORY_API, `/api/Inventory/${cylinderId}?quantity=${quantity}`, { method: "POST" }); onSaved(); }
+    catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -123,24 +79,11 @@ function CreateInventoryModal({ cylinders, onClose, onSaved }) {
         <h2>Create inventory</h2>
         {error && <div className="error-box">{error}</div>}
         <form onSubmit={handleSubmit}>
-          <div className="field">
-            <label>Cylinder</label>
-            <select value={cylinderId} onChange={e => setCylinderId(e.target.value)}>
-              <option value="">Select a cylinder…</option>
-              {cylinders.map(c => (
-                <option key={c.id} value={c.id}>{c.brand} — {c.size}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>Initial quantity</label>
-            <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="0" min="0" />
-          </div>
+          <div className="field"><label>Cylinder</label><select value={cylinderId} onChange={e => setCylinderId(e.target.value)}><option value="">Select a cylinder…</option>{cylinders.map(c => <option key={c.id} value={c.id}>{c.brand} — {c.size}</option>)}</select></div>
+          <div className="field"><label>Initial quantity</label><input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="0" min="0" /></div>
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-dark" disabled={loading}>
-              {loading ? "Creating…" : "Create"}
-            </button>
+            <button type="submit" className="btn btn-dark" disabled={loading}>{loading ? "Creating…" : "Create"}</button>
           </div>
         </form>
       </div>
@@ -148,53 +91,32 @@ function CreateInventoryModal({ cylinders, onClose, onSaved }) {
   );
 }
 
-// ── ADJUST MODAL (Admin + Staff) ──────────────────────────────────────────────
 function AdjustModal({ item, onClose, onSaved }) {
   const [change, setChange] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
+    e.preventDefault(); setError("");
     const val = parseFloat(change);
     if (isNaN(val) || val === 0) { setError("Enter a non-zero number. Use negative to decrease."); return; }
     setLoading(true);
-    try {
-      // PATCH /api/Inventory/{cylinderId}/adjust?quantityChange=N
-      await apiFetch(INVENTORY_API, `/api/Inventory/${item.cylinderId}/adjust?quantityChange=${val}`, { method: "PATCH" });
-      onSaved();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    try { await apiFetch(INVENTORY_API, `/api/Inventory/${item.cylinderId}/adjust?quantityChange=${val}`, { method: "PATCH" }); onSaved(); }
+    catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   }
 
   return (
     <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <h2>Adjust stock</h2>
-        <p style={{ fontSize: 13, color: "#999", marginBottom: "1.25rem" }}>
-          {item.brand} {item.size} — current stock: <strong>{item.quantityAvailable}</strong>
-        </p>
+        <p style={{ fontSize: 13, color: "#999", marginBottom: "1.25rem" }}>{item.brand} {item.size} — current stock: <strong>{item.quantityAvailable}</strong></p>
         {error && <div className="error-box">{error}</div>}
         <form onSubmit={handleSubmit}>
-          <div className="field">
-            <label>Quantity change</label>
-            <input
-              type="number"
-              value={change}
-              onChange={e => setChange(e.target.value)}
-              placeholder="e.g. +10 or -5"
-            />
-            <p className="hint">Use a positive number to add stock, negative to remove.</p>
-          </div>
+          <div className="field"><label>Quantity change</label><input type="number" value={change} onChange={e => setChange(e.target.value)} placeholder="e.g. +10 or -5" /><p className="hint">Positive to add, negative to remove.</p></div>
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-dark" disabled={loading}>
-              {loading ? "Saving…" : "Adjust"}
-            </button>
+            <button type="submit" className="btn btn-dark" disabled={loading}>{loading ? "Saving…" : "Adjust"}</button>
           </div>
         </form>
       </div>
@@ -202,7 +124,6 @@ function AdjustModal({ item, onClose, onSaved }) {
   );
 }
 
-// ── MAIN ──────────────────────────────────────────────────────────────────────
 export default function InventoryApp({ onLogout }) {
   const [inventory, setInventory] = useState([]);
   const [cylinders, setCylinders] = useState([]);
@@ -211,49 +132,30 @@ export default function InventoryApp({ onLogout }) {
   const [success, setSuccess] = useState("");
   const [modal, setModal] = useState(null);
   const [selected, setSelected] = useState(null);
-
   const roles = getRoles();
-  const userEmail = (() => { try { return JSON.parse(localStorage.getItem("user"))?.email || ""; } catch { return ""; } })();
+  const userEmail = getUserEmail();
 
-async function load() {
-  setLoading(true);
-  setError("");
-  try {
-    const [invData, cylData] = await Promise.all([
-      apiFetch(INVENTORY_API, "/api/Inventory"),
-      apiFetch(CYLINDER_API,  "/api/Cylinder/all"),
-    ]);
-    setInventory(invData || []);
-    setCylinders(cylData || []);
-  } catch (err) {
-    setError(err.message);
-  } finally {
-    setLoading(false);
+  async function load() {
+    setLoading(true); setError("");
+    try {
+      const [invData, cylData] = await Promise.all([
+        apiFetch(INVENTORY_API, "/api/Inventory"),
+        apiFetch(CYLINDER_API, "/api/Cylinder/all"),
+      ]);
+      setInventory(invData || []); setCylinders(cylData || []);
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   }
-}
 
   useEffect(() => { load(); }, []);
 
   async function handleDelete(cylinderId) {
     if (!window.confirm("Delete this inventory record?")) return;
-    try {
-      // DELETE /api/Inventory/{cylinderId}
-      await apiFetch(INVENTORY_API, `/api/Inventory/${cylinderId}`, { method: "DELETE" });
-      setSuccess("Inventory deleted.");
-      setTimeout(() => setSuccess(""), 2500);
-      load();
-    } catch (err) {
-      setError(err.message);
-    }
+    try { await apiFetch(INVENTORY_API, `/api/Inventory/${cylinderId}`, { method: "DELETE" }); setSuccess("Inventory deleted."); setTimeout(() => setSuccess(""), 2500); load(); }
+    catch (err) { setError(err.message); }
   }
 
-  function handleSaved() {
-    setModal(null);
-    setSelected(null);
-    setSuccess("Saved successfully.");
-    setTimeout(() => setSuccess(""), 2500);
-    load();
-  }
+  function handleSaved() { setModal(null); setSelected(null); setSuccess("Saved successfully."); setTimeout(() => setSuccess(""), 2500); load(); }
 
   const totalStock = inventory.reduce((sum, i) => sum + Number(i.quantityAvailable), 0);
   const lowStock = inventory.filter(i => i.quantityAvailable <= 5).length;
@@ -263,108 +165,52 @@ async function load() {
     <>
       <style>{css}</style>
       <div className="app">
-
-        {/* TOPBAR */}
         <div className="topbar">
-          <div className="topbar-left">
-            <h1>Inventory</h1>
-            <p>
-              {userEmail}
-              {roles.map(r => <span key={r} className="role-badge">{r}</span>)}
-            </p>
-          </div>
+          <div className="topbar-left"><h1>Inventory</h1><p>{userEmail}{roles.map(r => <span key={r} className="role-badge">{r}</span>)}</p></div>
           <div className="topbar-right">
             <button className="btn" onClick={load}>Refresh</button>
-            {isAdmin() && (
-              <button className="btn btn-dark" onClick={() => setModal("create")}>
-                + Create inventory
-              </button>
-            )}
+            {isAdmin() && <button className="btn btn-dark" onClick={() => setModal("create")}>+ Create inventory</button>}
             <button className="btn" onClick={onLogout}>Sign out</button>
           </div>
         </div>
-
-        {/* STATS */}
         <div className="stat-row">
           <div className="stat"><div className="stat-label">Total items</div><div className="stat-value">{inventory.length}</div></div>
           <div className="stat"><div className="stat-label">Total stock</div><div className="stat-value">{totalStock}</div></div>
           <div className="stat"><div className="stat-label">Low stock</div><div className="stat-value" style={{ color: lowStock > 0 ? "#c00" : "#1a7f4b" }}>{lowStock}</div></div>
         </div>
-
         {error && <div className="error-box">{error}</div>}
         {success && <div className="success-box">{success}</div>}
-
-        {/* TABLE */}
-        {loading ? (
-          <div className="loading"><div className="spinner" /> Loading inventory…</div>
-        ) : inventory.length === 0 ? (
-          <div className="empty">No inventory records yet. Create one to get started.</div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Cylinder</th>
-                  <th>Size</th>
-                  <th>Status</th>
-                  <th>Condition</th>
-                  <th>Stock</th>
-                  {isAdminOrStaff() && <th>Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {inventory.map(item => {
-                  const st = statusStyle(item.status);
-                  const pct = Math.min((Number(item.quantityAvailable) / maxQty) * 100, 100);
-                  return (
-                    <tr key={item.cylinderId}>
-                      <td style={{ fontWeight: 500 }}>{item.brand}</td>
-                      <td style={{ color: "#555" }}>{item.size}</td>
-                      <td>
-                        <span className="badge" style={{ background: st.bg, borderColor: st.border, color: st.color }}>
-                          {item.status}
-                        </span>
-                      </td>
-                      <td style={{ color: "#555" }}>{item.condition}</td>
-                      <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div className="stock-bar-wrap">
-                            <div className={`stock-bar ${stockColor(item.quantityAvailable)}`} style={{ width: `${pct}%` }} />
-                          </div>
-                          <span style={{ fontSize: 13, fontWeight: 500 }}>{item.quantityAvailable}</span>
-                        </div>
-                      </td>
-                      {isAdminOrStaff() && (
-                        <td>
-                          <div className="actions">
-                            <button className="btn" style={{ fontSize: 12, padding: "5px 10px" }}
-                              onClick={() => { setSelected(item); setModal("adjust"); }}>
-                              Adjust
-                            </button>
-                            {isAdmin() && (
-                              <button className="btn btn-danger" style={{ fontSize: 12, padding: "5px 10px" }}
-                                onClick={() => handleDelete(item.cylinderId)}>
-                                Delete
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {loading ? <div className="loading"><div className="spinner" /> Loading inventory…</div>
+          : inventory.length === 0 ? <div className="empty">No inventory records yet. Create one to get started.</div>
+          : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Cylinder</th><th>Size</th><th>Status</th><th>Condition</th><th>Stock</th>{isAdminOrStaff() && <th>Actions</th>}</tr></thead>
+                <tbody>
+                  {inventory.map(item => {
+                    const st = statusStyle(item.status);
+                    const pct = Math.min((Number(item.quantityAvailable) / maxQty) * 100, 100);
+                    return (
+                      <tr key={item.cylinderId}>
+                        <td style={{ fontWeight: 500 }}>{item.brand}</td>
+                        <td style={{ color: "#555" }}>{item.size}</td>
+                        <td><span className="badge" style={{ background: st.bg, borderColor: st.border, color: st.color }}>{item.status}</span></td>
+                        <td style={{ color: "#555" }}>{item.condition}</td>
+                        <td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><div className="stock-bar-wrap"><div className={`stock-bar ${stockColor(item.quantityAvailable)}`} style={{ width: `${pct}%` }} /></div><span style={{ fontSize: 13, fontWeight: 500 }}>{item.quantityAvailable}</span></div></td>
+                        {isAdminOrStaff() && <td><div className="actions">
+                          <button className="btn" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => { setSelected(item); setModal("adjust"); }}>Adjust</button>
+                          {isAdmin() && <button className="btn btn-danger" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => handleDelete(item.cylinderId)}>Delete</button>}
+                        </div></td>}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
       </div>
-
-      {modal === "create" && (
-        <CreateInventoryModal cylinders={cylinders} onClose={() => setModal(null)} onSaved={handleSaved} />
-      )}
-      {modal === "adjust" && selected && (
-        <AdjustModal item={selected} onClose={() => setModal(null)} onSaved={handleSaved} />
-      )}
+      {modal === "create" && <CreateInventoryModal cylinders={cylinders} onClose={() => setModal(null)} onSaved={handleSaved} />}
+      {modal === "adjust" && selected && <AdjustModal item={selected} onClose={() => setModal(null)} onSaved={handleSaved} />}
     </>
   );
 }

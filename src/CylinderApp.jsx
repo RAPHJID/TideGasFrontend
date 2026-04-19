@@ -1,29 +1,5 @@
 import { useState, useEffect } from "react";
-
-const API = "https://localhost:7139"; // 👈 change to your CylinderService port
-
-function getToken() { return localStorage.getItem("access_token"); }
-function getRoles() { try { return JSON.parse(localStorage.getItem("roles")) || []; } catch { return []; } }
-function isAdmin() { return getRoles().includes("Admin"); }
-function isAdminOrStaff() { return getRoles().some(r => ["Admin", "Staff"].includes(r)); }
-
-async function apiFetch(path, options = {}) {
-  const token = getToken();
-  const res = await fetch(`${API}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-  if (res.status === 204) return null;
-  const text = await res.text();
-  if (!text) return null;
-  const data = JSON.parse(text);
-  if (!res.ok) throw new Error(data.message || data.title || "Request failed");
-  return data;
-}
+import { apiFetch, CYLINDER_API, getRoles, getUserEmail, isAdmin, isAdminOrStaff } from "./config";
 
 const css = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -72,42 +48,22 @@ const css = `
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 4rem; color: #999; font-size: 14px; }
   .role-badge { background: #f2f2f0; border: 0.5px solid #e0e0dc; border-radius: 4px; font-size: 11px; padding: 2px 6px; color: #555; text-transform: uppercase; letter-spacing: 0.4px; margin-left: 4px; }
-  .sales-input { width: 70px; padding: 6px 8px; font-size: 13px; border: 0.5px solid #ddd; border-radius: 6px; outline: none; font-family: inherit; text-align: center; }
-  .sales-input:focus { border-color: #111; }
 `;
 
-function statusStyle(status) {
-  const map = {
-    Available:   { bg: "#f0faf4", border: "#b2dfc4", color: "#1a7f4b" },
-    InUse:       { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" },
-    UnderRefill: { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" },
-    Damaged:     { bg: "#fff0f0", border: "#fcc",    color: "#c00"    },
-  };
-  return map[status] || { bg: "#f2f2f0", border: "#e0e0dc", color: "#555" };
+function statusStyle(s) {
+  const map = { Available: { bg: "#f0faf4", border: "#b2dfc4", color: "#1a7f4b" }, InUse: { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" }, UnderRefill: { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" }, Damaged: { bg: "#fff0f0", border: "#fcc", color: "#c00" } };
+  return map[s] || { bg: "#f2f2f0", border: "#e0e0dc", color: "#555" };
+}
+function conditionStyle(c) {
+  const map = { New: { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" }, Good: { bg: "#f0faf4", border: "#b2dfc4", color: "#1a7f4b" }, Fair: { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" }, Damaged: { bg: "#fff0f0", border: "#fcc", color: "#c00" } };
+  return map[c] || { bg: "#f2f2f0", border: "#e0e0dc", color: "#555" };
 }
 
-function conditionStyle(condition) {
-  const map = {
-    New:     { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" },
-    Good:    { bg: "#f0faf4", border: "#b2dfc4", color: "#1a7f4b" },
-    Fair:    { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" },
-    Damaged: { bg: "#fff0f0", border: "#fcc",    color: "#c00"    },
-  };
-  return map[condition] || { bg: "#f2f2f0", border: "#e0e0dc", color: "#555" };
-}
-
-// ── ADD / EDIT MODAL ──────────────────────────────────────────────────────────
 function CylinderModal({ cylinder, onClose, onSaved }) {
   const isEdit = !!cylinder?.id;
-  const [form, setForm] = useState({
-    size: cylinder?.size || "",
-    brand: cylinder?.brand || "",
-    status: cylinder?.status || "Available",
-    condition: cylinder?.condition || "Good",
-  });
+  const [form, setForm] = useState({ size: cylinder?.size || "", brand: cylinder?.brand || "", status: cylinder?.status || "Available", condition: cylinder?.condition || "Good" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   async function handleSubmit(e) {
@@ -116,17 +72,11 @@ function CylinderModal({ cylinder, onClose, onSaved }) {
     if (!form.brand || !form.size) { setError("Brand and size are required."); return; }
     setLoading(true);
     try {
-      if (isEdit) {
-        await apiFetch(`/api/Cylinder/${cylinder.id}`, { method: "PUT", body: JSON.stringify(form) });
-      } else {
-        await apiFetch("/api/Cylinder", { method: "POST", body: JSON.stringify(form) });
-      }
+      if (isEdit) await apiFetch(CYLINDER_API, `/api/Cylinder/${cylinder.id}`, { method: "PUT", body: JSON.stringify(form) });
+      else await apiFetch(CYLINDER_API, "/api/Cylinder", { method: "POST", body: JSON.stringify(form) });
       onSaved();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -137,29 +87,11 @@ function CylinderModal({ cylinder, onClose, onSaved }) {
         <form onSubmit={handleSubmit}>
           <div className="field"><label>Brand</label><input value={form.brand} onChange={e => set("brand", e.target.value)} placeholder="e.g. Total, Woqod" /></div>
           <div className="field"><label>Size</label><input value={form.size} onChange={e => set("size", e.target.value)} placeholder="e.g. 12kg, 45kg" /></div>
-          <div className="field">
-            <label>Status</label>
-            <select value={form.status} onChange={e => set("status", e.target.value)}>
-              <option>Available</option>
-              <option>InUse</option>
-              <option>UnderRefill</option>
-              <option>Damaged</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Condition</label>
-            <select value={form.condition} onChange={e => set("condition", e.target.value)}>
-              <option>Good</option>
-              <option>Fair</option>
-              <option>New</option>
-              <option>Damaged</option>
-            </select>
-          </div>
+          <div className="field"><label>Status</label><select value={form.status} onChange={e => set("status", e.target.value)}><option>Available</option><option>InUse</option><option>UnderRefill</option><option>Damaged</option></select></div>
+          <div className="field"><label>Condition</label><select value={form.condition} onChange={e => set("condition", e.target.value)}><option>Good</option><option>Fair</option><option>New</option><option>Damaged</option></select></div>
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-dark" disabled={loading}>
-              {loading ? "Saving…" : isEdit ? "Save changes" : "Add cylinder"}
-            </button>
+            <button type="submit" className="btn btn-dark" disabled={loading}>{loading ? "Saving…" : isEdit ? "Save changes" : "Add cylinder"}</button>
           </div>
         </form>
       </div>
@@ -167,7 +99,6 @@ function CylinderModal({ cylinder, onClose, onSaved }) {
   );
 }
 
-// ── DAILY SALES MODAL ─────────────────────────────────────────────────────────
 function DailySalesModal({ cylinder, onClose, onSaved }) {
   const [qty, setQty] = useState("");
   const [loading, setLoading] = useState(false);
@@ -179,36 +110,23 @@ function DailySalesModal({ cylinder, onClose, onSaved }) {
     if (!qty || isNaN(qty)) { setError("Enter a valid quantity."); return; }
     setLoading(true);
     try {
-      await apiFetch(`/api/Cylinder/${cylinder.id}/daily-sales`, {
-        method: "PUT",
-        body: JSON.stringify({ quantitySoldToday: Number(qty) }),
-      });
+      await apiFetch(CYLINDER_API, `/api/Cylinder/${cylinder.id}/daily-sales`, { method: "PUT", body: JSON.stringify({ quantitySoldToday: Number(qty) }) });
       onSaved();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   }
 
   return (
     <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <h2>Update daily sales</h2>
-        <p style={{ fontSize: 13, color: "#999", marginBottom: "1.25rem" }}>
-          {cylinder.brand} — {cylinder.size}
-        </p>
+        <p style={{ fontSize: 13, color: "#999", marginBottom: "1.25rem" }}>{cylinder.brand} — {cylinder.size}</p>
         {error && <div className="error-box">{error}</div>}
         <form onSubmit={handleSubmit}>
-          <div className="field">
-            <label>Quantity sold today</label>
-            <input type="number" value={qty} onChange={e => setQty(e.target.value)} placeholder="0" />
-          </div>
+          <div className="field"><label>Quantity sold today</label><input type="number" value={qty} onChange={e => setQty(e.target.value)} placeholder="0" /></div>
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-dark" disabled={loading}>
-              {loading ? "Saving…" : "Update"}
-            </button>
+            <button type="submit" className="btn btn-dark" disabled={loading}>{loading ? "Saving…" : "Update"}</button>
           </div>
         </form>
       </div>
@@ -216,7 +134,6 @@ function DailySalesModal({ cylinder, onClose, onSaved }) {
   );
 }
 
-// ── MAIN ──────────────────────────────────────────────────────────────────────
 export default function CylinderApp({ onLogout }) {
   const [cylinders, setCylinders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -225,183 +142,89 @@ export default function CylinderApp({ onLogout }) {
   const [tab, setTab] = useState("all");
   const [modal, setModal] = useState(null);
   const [selected, setSelected] = useState(null);
-
   const roles = getRoles();
-  const userEmail = (() => { try { return JSON.parse(localStorage.getItem("user"))?.email || ""; } catch { return ""; } })();
+  const userEmail = getUserEmail();
 
   async function load() {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await apiFetch("/api/Cylinder/all");
-      setCylinders(data || []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true); setError("");
+    try { const data = await apiFetch(CYLINDER_API, "/api/Cylinder/all"); setCylinders(data || []); }
+    catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => { load(); }, []);
 
   async function handleDelete(id) {
     if (!window.confirm("Delete this cylinder?")) return;
-    try {
-      await apiFetch(`/api/Cylinder/${id}`, { method: "DELETE" });
-      setSuccess("Cylinder deleted.");
-      setTimeout(() => setSuccess(""), 2500);
-      load();
-    } catch (err) {
-      setError(err.message);
-    }
+    try { await apiFetch(CYLINDER_API, `/api/Cylinder/${id}`, { method: "DELETE" }); setSuccess("Cylinder deleted."); setTimeout(() => setSuccess(""), 2500); load(); }
+    catch (err) { setError(err.message); }
   }
 
-  function handleSaved() {
-    setModal(null);
-    setSelected(null);
-    setSuccess("Saved successfully.");
-    setTimeout(() => setSuccess(""), 2500);
-    load();
-  }
+  function handleSaved() { setModal(null); setSelected(null); setSuccess("Saved successfully."); setTimeout(() => setSuccess(""), 2500); load(); }
 
   const filtered = tab === "all" ? cylinders : cylinders.filter(c => c.status === tab);
-
-  const stats = {
-    total:       cylinders.length,
-    available:   cylinders.filter(c => c.status === "Available").length,
-    inUse:       cylinders.filter(c => c.status === "InUse").length,
-    underRefill: cylinders.filter(c => c.status === "UnderRefill").length,
-  };
+  const stats = { total: cylinders.length, available: cylinders.filter(c => c.status === "Available").length, inUse: cylinders.filter(c => c.status === "InUse").length, underRefill: cylinders.filter(c => c.status === "UnderRefill").length };
 
   return (
     <>
       <style>{css}</style>
       <div className="app">
-
-        {/* TOPBAR */}
         <div className="topbar">
-          <div className="topbar-left">
-            <h1>Cylinder Management</h1>
-            <p>
-              {userEmail}
-              {roles.map(r => <span key={r} className="role-badge">{r}</span>)}
-            </p>
-          </div>
+          <div className="topbar-left"><h1>Cylinder Management</h1><p>{userEmail}{roles.map(r => <span key={r} className="role-badge">{r}</span>)}</p></div>
           <div className="topbar-right">
             <button className="btn" onClick={load}>Refresh</button>
-            {isAdmin() && (
-              <button className="btn btn-dark" onClick={() => { setSelected(null); setModal("add"); }}>
-                + Add cylinder
-              </button>
-            )}
+            {isAdmin() && <button className="btn btn-dark" onClick={() => { setSelected(null); setModal("add"); }}>+ Add cylinder</button>}
             <button className="btn" onClick={onLogout}>Sign out</button>
           </div>
         </div>
-
-        {/* STATS */}
         <div className="stat-row">
           <div className="stat"><div className="stat-label">Total</div><div className="stat-value">{stats.total}</div></div>
           <div className="stat"><div className="stat-label">Available</div><div className="stat-value" style={{ color: "#1a7f4b" }}>{stats.available}</div></div>
           <div className="stat"><div className="stat-label">In use</div><div className="stat-value" style={{ color: "#7a6000" }}>{stats.inUse}</div></div>
           <div className="stat"><div className="stat-label">Under refill</div><div className="stat-value" style={{ color: "#1d4ed8" }}>{stats.underRefill}</div></div>
         </div>
-
         {error && <div className="error-box">{error}</div>}
         {success && <div className="success-box">{success}</div>}
-
-        {/* TABS */}
         <div className="tabs">
           {["all", "Available", "InUse", "UnderRefill", "Damaged"].map(t => (
-            <button key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
-              {t === "all" ? "All" : t}
-            </button>
+            <button key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t === "all" ? "All" : t}</button>
           ))}
         </div>
-
-        {/* TABLE */}
-        {loading ? (
-          <div className="loading"><div className="spinner" /> Loading cylinders…</div>
-        ) : filtered.length === 0 ? (
-          <div className="empty">No cylinders found.</div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Brand</th>
-                  <th>Size</th>
-                  <th>Status</th>
-                  <th>Condition</th>
-                  <th>Sold today</th>
-                  {isAdminOrStaff() && <th>Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(c => {
-                  const st = statusStyle(c.status);
-                  const ct = conditionStyle(c.condition);
-                  return (
-                    <tr key={c.id}>
-                      <td style={{ fontWeight: 500 }}>{c.brand}</td>
-                      <td style={{ color: "#555" }}>{c.size}</td>
-                      <td>
-                        <span className="badge" style={{ background: st.bg, borderColor: st.border, color: st.color }}>
-                          {c.status}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="badge" style={{ background: ct.bg, borderColor: ct.border, color: ct.color }}>
-                          {c.condition}
-                        </span>
-                      </td>
-                      <td style={{ color: "#555" }}>{c.soldToday ?? 0}</td>
-                      {isAdminOrStaff() && (
-                        <td>
-                          <div className="actions">
-                            {isAdminOrStaff() && (
-                              <button className="btn" style={{ fontSize: 12, padding: "5px 10px" }}
-                                onClick={() => { setSelected(c); setModal("sales"); }}>
-                                Daily sales
-                              </button>
-                            )}
-                            {isAdmin() && (
-                              <>
-                                <button className="btn" style={{ fontSize: 12, padding: "5px 10px" }}
-                                  onClick={() => { setSelected(c); setModal("edit"); }}>
-                                  Edit
-                                </button>
-                                <button className="btn btn-danger" style={{ fontSize: 12, padding: "5px 10px" }}
-                                  onClick={() => handleDelete(c.id)}>
-                                  Delete
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {loading ? <div className="loading"><div className="spinner" /> Loading cylinders…</div>
+          : filtered.length === 0 ? <div className="empty">No cylinders found.</div>
+          : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Brand</th><th>Size</th><th>Status</th><th>Condition</th><th>Sold today</th>{isAdminOrStaff() && <th>Actions</th>}</tr></thead>
+                <tbody>
+                  {filtered.map(c => {
+                    const st = statusStyle(c.status); const ct = conditionStyle(c.condition);
+                    return (
+                      <tr key={c.id}>
+                        <td style={{ fontWeight: 500 }}>{c.brand}</td>
+                        <td style={{ color: "#555" }}>{c.size}</td>
+                        <td><span className="badge" style={{ background: st.bg, borderColor: st.border, color: st.color }}>{c.status}</span></td>
+                        <td><span className="badge" style={{ background: ct.bg, borderColor: ct.border, color: ct.color }}>{c.condition}</span></td>
+                        <td style={{ color: "#555" }}>{c.soldToday ?? 0}</td>
+                        {isAdminOrStaff() && (
+                          <td><div className="actions">
+                            <button className="btn" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => { setSelected(c); setModal("sales"); }}>Daily sales</button>
+                            {isAdmin() && <>
+                              <button className="btn" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => { setSelected(c); setModal("edit"); }}>Edit</button>
+                              <button className="btn btn-danger" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => handleDelete(c.id)}>Delete</button>
+                            </>}
+                          </div></td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
       </div>
-
-      {(modal === "add" || modal === "edit") && (
-        <CylinderModal
-          cylinder={modal === "edit" ? selected : null}
-          onClose={() => setModal(null)}
-          onSaved={handleSaved}
-        />
-      )}
-      {modal === "sales" && selected && (
-        <DailySalesModal
-          cylinder={selected}
-          onClose={() => setModal(null)}
-          onSaved={handleSaved}
-        />
-      )}
+      {(modal === "add" || modal === "edit") && <CylinderModal cylinder={modal === "edit" ? selected : null} onClose={() => setModal(null)} onSaved={handleSaved} />}
+      {modal === "sales" && selected && <DailySalesModal cylinder={selected} onClose={() => setModal(null)} onSaved={handleSaved} />}
     </>
   );
 }
