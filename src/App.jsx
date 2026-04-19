@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AuthComponent from "./AuthComponent";
+import Dashboard from "./Dashboard";
 import CylinderApp from "./CylinderApp";
 import CustomerApp from "./CustomerApp";
 import OrderApp from "./OrderApp";
@@ -8,17 +9,18 @@ import TransactionApp from "./TransactionApp";
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem("access_token"));
-  const [page, setPage] = useState("cylinders");
+  const [page, setPage] = useState("dashboard"); // 👈 dashboard is now default
 
   function handleLogout() {
     localStorage.clear();
     setLoggedIn(false);
-    setPage("cylinders");
+    setPage("dashboard");
   }
 
   if (!loggedIn) return <AuthComponent onAuthSuccess={() => setLoggedIn(true)} />;
 
   const pages = [
+    { key: "dashboard",    label: "Dashboard" },
     { key: "cylinders",    label: "Cylinders" },
     { key: "inventory",    label: "Inventory" },
     { key: "customers",    label: "Customers" },
@@ -47,6 +49,7 @@ export default function App() {
         ))}
       </nav>
 
+      {page === "dashboard"    && <Dashboard      onLogout={handleLogout} />}
       {page === "cylinders"    && <CylinderApp    onLogout={handleLogout} />}
       {page === "inventory"    && <InventoryApp    onLogout={handleLogout} />}
       {page === "customers"    && <CustomerApp     onLogout={handleLogout} />}
