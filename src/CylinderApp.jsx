@@ -1,97 +1,43 @@
 import { useState, useEffect } from "react";
 import { apiFetch, CYLINDER_API, getRoles, getUserEmail, isAdmin, isAdminOrStaff } from "./config";
+import { BASE_CSS } from "./theme";
 
-const css = `
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'DM Sans', 'Helvetica Neue', sans-serif; background: #f7f7f5; color: #111; }
-  .app { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
-  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
-  .topbar-left h1 { font-size: 20px; font-weight: 500; letter-spacing: -0.3px; }
-  .topbar-left p { font-size: 13px; color: #999; margin-top: 2px; }
-  .topbar-right { display: flex; gap: 8px; align-items: center; }
-  .btn { padding: 8px 16px; font-size: 13px; font-weight: 500; border-radius: 8px; border: 0.5px solid #ddd; cursor: pointer; font-family: inherit; background: #fff; color: #111; transition: background 0.15s; }
-  .btn:hover { background: #f2f2f0; }
-  .btn-dark { background: #111; color: #fff; border-color: #111; }
-  .btn-dark:hover { background: #333; }
-  .btn-danger { background: #fff0f0; color: #c00; border-color: #fcc; }
-  .btn-danger:hover { background: #ffe0e0; }
-  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 1.5rem; background: #f2f2f0; border-radius: 10px; padding: 4px; width: fit-content; }
-  .tab { padding: 7px 18px; font-size: 13px; font-weight: 500; border: none; border-radius: 7px; cursor: pointer; background: transparent; color: #999; font-family: inherit; }
-  .tab.active { background: #fff; color: #111; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-  .table-wrap { background: #fff; border: 0.5px solid #e2e2de; border-radius: 14px; overflow: hidden; }
-  table { width: 100%; border-collapse: collapse; }
-  thead { background: #f7f7f5; }
-  th { text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 500; color: #999; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 0.5px solid #e2e2de; }
-  td { padding: 14px 16px; font-size: 14px; border-bottom: 0.5px solid #f0f0ee; vertical-align: middle; }
-  tr:last-child td { border-bottom: none; }
-  tr:hover td { background: #fafaf8; }
-  .badge { display: inline-block; padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 500; border: 0.5px solid; }
-  .actions { display: flex; gap: 6px; }
-  .empty { text-align: center; padding: 4rem 2rem; color: #bbb; font-size: 14px; }
-  .error-box { background: #fff0f0; border: 0.5px solid #fcc; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #c00; margin-bottom: 1rem; }
-  .success-box { background: #f0faf4; border: 0.5px solid #b2dfc4; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #1a7f4b; margin-bottom: 1rem; }
-  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 1rem; }
-  .modal { background: #fff; border-radius: 16px; padding: 2rem; width: 100%; max-width: 400px; border: 0.5px solid #e2e2de; }
-  .modal h2 { font-size: 17px; font-weight: 500; margin-bottom: 1.25rem; }
-  .field { margin-bottom: 1rem; }
-  .field label { display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 6px; }
-  .field input, .field select { width: 100%; padding: 10px 12px; font-size: 14px; border: 0.5px solid #ddd; border-radius: 8px; outline: none; font-family: inherit; color: #111; background: #fff; }
-  .field input:focus, .field select:focus { border-color: #111; }
-  .modal-actions { display: flex; gap: 8px; margin-top: 1.25rem; }
-  .modal-actions .btn { flex: 1; }
-  .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
-  .stat { background: #fff; border: 0.5px solid #e2e2de; border-radius: 12px; padding: 1rem 1.25rem; }
-  .stat-label { font-size: 12px; color: #999; margin-bottom: 4px; }
-  .stat-value { font-size: 24px; font-weight: 500; color: #111; }
-  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: #111; border-radius: 50%; animation: spin 0.6s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 4rem; color: #999; font-size: 14px; }
-  .role-badge { background: #f2f2f0; border: 0.5px solid #e0e0dc; border-radius: 4px; font-size: 11px; padding: 2px 6px; color: #555; text-transform: uppercase; letter-spacing: 0.4px; margin-left: 4px; }
-`;
-
-function statusStyle(s) {
-  const map = { Available: { bg: "#f0faf4", border: "#b2dfc4", color: "#1a7f4b" }, InUse: { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" }, UnderRefill: { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" }, Damaged: { bg: "#fff0f0", border: "#fcc", color: "#c00" } };
-  return map[s] || { bg: "#f2f2f0", border: "#e0e0dc", color: "#555" };
-}
-function conditionStyle(c) {
-  const map = { New: { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" }, Good: { bg: "#f0faf4", border: "#b2dfc4", color: "#1a7f4b" }, Fair: { bg: "#fffbf0", border: "#ede0a0", color: "#7a6000" }, Damaged: { bg: "#fff0f0", border: "#fcc", color: "#c00" } };
-  return map[c] || { bg: "#f2f2f0", border: "#e0e0dc", color: "#555" };
-}
+function statusBadge(s) { const m={Available:"badge-green",InUse:"badge-amber",UnderRefill:"badge-blue",Damaged:"badge-red"}; return m[s]||"badge-muted"; }
+function condBadge(c) { const m={New:"badge-blue",Good:"badge-green",Fair:"badge-amber",Damaged:"badge-red"}; return m[c]||"badge-muted"; }
 
 function CylinderModal({ cylinder, onClose, onSaved }) {
   const isEdit = !!cylinder?.id;
-  const [form, setForm] = useState({ size: cylinder?.size || "", brand: cylinder?.brand || "", status: cylinder?.status || "Available", condition: cylinder?.condition || "Good" });
+  const [form, setForm] = useState({ size: cylinder?.size||"", brand: cylinder?.brand||"", status: cylinder?.status||"Available", condition: cylinder?.condition||"Good" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    if (!form.brand || !form.size) { setError("Brand and size are required."); return; }
+    e.preventDefault(); setError("");
+    if (!form.brand||!form.size){setError("Brand and size required.");return;}
     setLoading(true);
     try {
-      if (isEdit) await apiFetch(CYLINDER_API, `/api/Cylinder/${cylinder.id}`, { method: "PUT", body: JSON.stringify(form) });
-      else await apiFetch(CYLINDER_API, "/api/Cylinder", { method: "POST", body: JSON.stringify(form) });
+      if (isEdit) await apiFetch(CYLINDER_API,`/api/Cylinder/${cylinder.id}`,{method:"PUT",body:JSON.stringify(form)});
+      else await apiFetch(CYLINDER_API,"/api/Cylinder",{method:"POST",body:JSON.stringify(form)});
       onSaved();
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+    } catch(err){setError(err.message);}
+    finally{setLoading(false);}
   }
 
   return (
-    <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal">
-        <h2>{isEdit ? "Edit cylinder" : "Add cylinder"}</h2>
-        {error && <div className="error-box">{error}</div>}
+        <div className="modal-handle"/>
+        <h2>{isEdit?"Edit Cylinder":"Add Cylinder"}</h2>
+        {error&&<div className="error-box">{error}</div>}
         <form onSubmit={handleSubmit}>
-          <div className="field"><label>Brand</label><input value={form.brand} onChange={e => set("brand", e.target.value)} placeholder="e.g. Total, Woqod" /></div>
-          <div className="field"><label>Size</label><input value={form.size} onChange={e => set("size", e.target.value)} placeholder="e.g. 12kg, 45kg" /></div>
-          <div className="field"><label>Status</label><select value={form.status} onChange={e => set("status", e.target.value)}><option>Available</option><option>InUse</option><option>UnderRefill</option><option>Damaged</option></select></div>
-          <div className="field"><label>Condition</label><select value={form.condition} onChange={e => set("condition", e.target.value)}><option>Good</option><option>Fair</option><option>New</option><option>Damaged</option></select></div>
+          <div className="field"><label>Brand</label><input value={form.brand} onChange={e=>set("brand",e.target.value)} placeholder="e.g. Total, Woqod"/></div>
+          <div className="field"><label>Size</label><input value={form.size} onChange={e=>set("size",e.target.value)} placeholder="e.g. 12kg, 45kg"/></div>
+          <div className="field"><label>Status</label><select value={form.status} onChange={e=>set("status",e.target.value)}><option>Available</option><option>InUse</option><option>UnderRefill</option><option>Damaged</option></select></div>
+          <div className="field"><label>Condition</label><select value={form.condition} onChange={e=>set("condition",e.target.value)}><option>Good</option><option>Fair</option><option>New</option><option>Damaged</option></select></div>
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-dark" disabled={loading}>{loading ? "Saving…" : isEdit ? "Save changes" : "Add cylinder"}</button>
+            <button type="submit" className="btn btn-primary" disabled={loading}>{loading?"Saving...":isEdit?"Save":"Add"}</button>
           </div>
         </form>
       </div>
@@ -99,34 +45,32 @@ function CylinderModal({ cylinder, onClose, onSaved }) {
   );
 }
 
-function DailySalesModal({ cylinder, onClose, onSaved }) {
+function SalesModal({ cylinder, onClose, onSaved }) {
   const [qty, setQty] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    if (!qty || isNaN(qty)) { setError("Enter a valid quantity."); return; }
+    e.preventDefault(); setError("");
+    if (!qty||isNaN(qty)){setError("Enter a valid quantity.");return;}
     setLoading(true);
-    try {
-      await apiFetch(CYLINDER_API, `/api/Cylinder/${cylinder.id}/daily-sales`, { method: "PUT", body: JSON.stringify({ quantitySoldToday: Number(qty) }) });
-      onSaved();
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+    try { await apiFetch(CYLINDER_API,`/api/Cylinder/${cylinder.id}/daily-sales`,{method:"PUT",body:JSON.stringify({quantitySoldToday:Number(qty)})}); onSaved(); }
+    catch(err){setError(err.message);}
+    finally{setLoading(false);}
   }
 
   return (
-    <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal">
-        <h2>Update daily sales</h2>
-        <p style={{ fontSize: 13, color: "#999", marginBottom: "1.25rem" }}>{cylinder.brand} — {cylinder.size}</p>
-        {error && <div className="error-box">{error}</div>}
+        <div className="modal-handle"/>
+        <h2>Daily Sales</h2>
+        <div style={{fontSize:13,color:"#2e5c2e",marginBottom:16}}>{cylinder.brand} — {cylinder.size}</div>
+        {error&&<div className="error-box">{error}</div>}
         <form onSubmit={handleSubmit}>
-          <div className="field"><label>Quantity sold today</label><input type="number" value={qty} onChange={e => setQty(e.target.value)} placeholder="0" /></div>
+          <div className="field"><label>Qty sold today</label><input type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder="0"/></div>
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-dark" disabled={loading}>{loading ? "Saving…" : "Update"}</button>
+            <button type="submit" className="btn btn-primary" disabled={loading}>{loading?"Saving...":"Update"}</button>
           </div>
         </form>
       </div>
@@ -134,7 +78,7 @@ function DailySalesModal({ cylinder, onClose, onSaved }) {
   );
 }
 
-export default function CylinderApp({ onLogout }) {
+export default function CylinderApp() {
   const [cylinders, setCylinders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -142,89 +86,86 @@ export default function CylinderApp({ onLogout }) {
   const [tab, setTab] = useState("all");
   const [modal, setModal] = useState(null);
   const [selected, setSelected] = useState(null);
-  const roles = getRoles();
-  const userEmail = getUserEmail();
 
   async function load() {
     setLoading(true); setError("");
-    try { const data = await apiFetch(CYLINDER_API, "/api/Cylinder/all"); setCylinders(data || []); }
-    catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+    try { const d = await apiFetch(CYLINDER_API,"/api/Cylinder/all"); setCylinders(d||[]); }
+    catch(err){setError(err.message);}
+    finally{setLoading(false);}
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(()=>{load();},[]);
 
   async function handleDelete(id) {
-    if (!window.confirm("Delete this cylinder?")) return;
-    try { await apiFetch(CYLINDER_API, `/api/Cylinder/${id}`, { method: "DELETE" }); setSuccess("Cylinder deleted."); setTimeout(() => setSuccess(""), 2500); load(); }
-    catch (err) { setError(err.message); }
+    if(!window.confirm("Delete this cylinder?"))return;
+    try { await apiFetch(CYLINDER_API,`/api/Cylinder/${id}`,{method:"DELETE"}); setSuccess("Deleted."); setTimeout(()=>setSuccess(""),2500); load(); }
+    catch(err){setError(err.message);}
   }
 
-  function handleSaved() { setModal(null); setSelected(null); setSuccess("Saved successfully."); setTimeout(() => setSuccess(""), 2500); load(); }
+  function handleSaved(){setModal(null);setSelected(null);setSuccess("Saved.");setTimeout(()=>setSuccess(""),2500);load();}
 
-  const filtered = tab === "all" ? cylinders : cylinders.filter(c => c.status === tab);
-  const stats = { total: cylinders.length, available: cylinders.filter(c => c.status === "Available").length, inUse: cylinders.filter(c => c.status === "InUse").length, underRefill: cylinders.filter(c => c.status === "UnderRefill").length };
+  const filtered = tab==="all"?cylinders:cylinders.filter(c=>c.status===tab);
+  const stats = { total:cylinders.length, available:cylinders.filter(c=>c.status==="Available").length, inUse:cylinders.filter(c=>c.status==="InUse").length };
 
   return (
     <>
-      <style>{css}</style>
-      <div className="app">
-        <div className="topbar">
-          <div className="topbar-left"><h1>Cylinder Management</h1><p>{userEmail}{roles.map(r => <span key={r} className="role-badge">{r}</span>)}</p></div>
-          <div className="topbar-right">
+      <style>{BASE_CSS}</style>
+      <div className="page">
+        {/* STATS */}
+        <div className="stat-grid" style={{marginBottom:16}}>
+          <div className="stat"><div className="stat-label">Total</div><div className="stat-value white">{stats.total}</div></div>
+          <div className="stat"><div className="stat-label">Available</div><div className="stat-value">{stats.available}</div></div>
+          <div className="stat"><div className="stat-label">In use</div><div className="stat-value amber">{stats.inUse}</div></div>
+          <div className="stat"><div className="stat-label">Other</div><div className="stat-value white">{stats.total-stats.available-stats.inUse}</div></div>
+        </div>
+
+        {error&&<div className="error-box">{error}</div>}
+        {success&&<div className="success-box">{success}</div>}
+
+        {/* ACTIONS */}
+        {isAdmin()&&(
+          <div className="topbar-actions">
+            <button className="btn btn-primary" onClick={()=>{setSelected(null);setModal("add");}}>+ Add Cylinder</button>
             <button className="btn" onClick={load}>Refresh</button>
-            {isAdmin() && <button className="btn btn-dark" onClick={() => { setSelected(null); setModal("add"); }}>+ Add cylinder</button>}
-            <button className="btn" onClick={onLogout}>Sign out</button>
           </div>
-        </div>
-        <div className="stat-row">
-          <div className="stat"><div className="stat-label">Total</div><div className="stat-value">{stats.total}</div></div>
-          <div className="stat"><div className="stat-label">Available</div><div className="stat-value" style={{ color: "#1a7f4b" }}>{stats.available}</div></div>
-          <div className="stat"><div className="stat-label">In use</div><div className="stat-value" style={{ color: "#7a6000" }}>{stats.inUse}</div></div>
-          <div className="stat"><div className="stat-label">Under refill</div><div className="stat-value" style={{ color: "#1d4ed8" }}>{stats.underRefill}</div></div>
-        </div>
-        {error && <div className="error-box">{error}</div>}
-        {success && <div className="success-box">{success}</div>}
+        )}
+
+        {/* TABS */}
         <div className="tabs">
-          {["all", "Available", "InUse", "UnderRefill", "Damaged"].map(t => (
-            <button key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t === "all" ? "All" : t}</button>
+          {["all","Available","InUse","UnderRefill","Damaged"].map(t=>(
+            <button key={t} className={`tab-btn ${tab===t?"active":""}`} onClick={()=>setTab(t)}>{t==="all"?"All":t}</button>
           ))}
         </div>
-        {loading ? <div className="loading"><div className="spinner" /> Loading cylinders…</div>
-          : filtered.length === 0 ? <div className="empty">No cylinders found.</div>
-          : (
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Brand</th><th>Size</th><th>Status</th><th>Condition</th><th>Sold today</th>{isAdminOrStaff() && <th>Actions</th>}</tr></thead>
-                <tbody>
-                  {filtered.map(c => {
-                    const st = statusStyle(c.status); const ct = conditionStyle(c.condition);
-                    return (
-                      <tr key={c.id}>
-                        <td style={{ fontWeight: 500 }}>{c.brand}</td>
-                        <td style={{ color: "#555" }}>{c.size}</td>
-                        <td><span className="badge" style={{ background: st.bg, borderColor: st.border, color: st.color }}>{c.status}</span></td>
-                        <td><span className="badge" style={{ background: ct.bg, borderColor: ct.border, color: ct.color }}>{c.condition}</span></td>
-                        <td style={{ color: "#555" }}>{c.soldToday ?? 0}</td>
-                        {isAdminOrStaff() && (
-                          <td><div className="actions">
-                            <button className="btn" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => { setSelected(c); setModal("sales"); }}>Daily sales</button>
-                            {isAdmin() && <>
-                              <button className="btn" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => { setSelected(c); setModal("edit"); }}>Edit</button>
-                              <button className="btn btn-danger" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => handleDelete(c.id)}>Delete</button>
-                            </>}
-                          </div></td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+
+        {/* LIST */}
+        {loading?<div className="loading"><div className="spinner"/> Loading...</div>
+        :filtered.length===0?<div className="empty">No cylinders found</div>
+        :filtered.map(c=>(
+          <div key={c.id} className="card">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+              <div>
+                <div style={{fontSize:17,fontWeight:700,color:"#c8e6c8"}}>{c.brand}</div>
+                <div style={{fontSize:12,color:"#2e5c2e",marginTop:3}}>{c.size}</div>
+              </div>
+              <span className={`badge ${statusBadge(c.status)}`}>{c.status}</span>
             </div>
-          )}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <span className={`badge ${condBadge(c.condition)}`}>{c.condition}</span>
+              <span style={{fontSize:12,color:"#2e5c2e"}}>Sold today: <span style={{color:"#c8e6c8"}}>{c.soldToday??0}</span></span>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              {isAdminOrStaff()&&<button className="btn btn-sm" onClick={()=>{setSelected(c);setModal("sales");}}>Daily Sales</button>}
+              {isAdmin()&&<>
+                <button className="btn btn-sm" onClick={()=>{setSelected(c);setModal("edit");}}>Edit</button>
+                <button className="btn btn-sm btn-danger" onClick={()=>handleDelete(c.id)}>Delete</button>
+              </>}
+            </div>
+          </div>
+        ))}
       </div>
-      {(modal === "add" || modal === "edit") && <CylinderModal cylinder={modal === "edit" ? selected : null} onClose={() => setModal(null)} onSaved={handleSaved} />}
-      {modal === "sales" && selected && <DailySalesModal cylinder={selected} onClose={() => setModal(null)} onSaved={handleSaved} />}
+
+      {(modal==="add"||modal==="edit")&&<CylinderModal cylinder={modal==="edit"?selected:null} onClose={()=>setModal(null)} onSaved={handleSaved}/>}
+      {modal==="sales"&&selected&&<SalesModal cylinder={selected} onClose={()=>setModal(null)} onSaved={handleSaved}/>}
     </>
   );
 }
