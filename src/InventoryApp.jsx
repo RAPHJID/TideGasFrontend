@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { apiFetch, INVENTORY_API, CYLINDER_API, isAdmin, isAdminOrStaff } from "./config";
+import { apiFetch, INVENTORY_API, CYLINDER_API, can } from "./config";
 import { BASE_CSS } from "./theme";
 
 function CreateModal({ cylinders, onClose, onSaved }) {
@@ -8,16 +8,16 @@ function CreateModal({ cylinders, onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleSubmit(e) {
-    e.preventDefault(); setError("");
+  async function handleSubmit(e){
+    e.preventDefault();setError("");
     if(!cylinderId||!quantity){setError("Please fill in all fields.");return;}
     setLoading(true);
-    try { await apiFetch(INVENTORY_API,`/api/Inventory/${cylinderId}?quantity=${quantity}`,{method:"POST"}); onSaved(); }
+    try{await apiFetch(INVENTORY_API,`/api/Inventory/${cylinderId}?quantity=${quantity}`,{method:"POST"});onSaved();}
     catch(err){setError(err.message);}
     finally{setLoading(false);}
   }
 
-  return (
+  return(
     <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal">
         <div className="modal-handle"/>
@@ -41,29 +41,29 @@ function AdjustModal({ item, onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleSubmit(e) {
-    e.preventDefault(); setError("");
-    const val = parseFloat(change);
+  async function handleSubmit(e){
+    e.preventDefault();setError("");
+    const val=parseFloat(change);
     if(isNaN(val)||val===0){setError("Enter a non-zero number.");return;}
     setLoading(true);
-    try { await apiFetch(INVENTORY_API,`/api/Inventory/${item.cylinderId}/adjust?quantityChange=${val}`,{method:"PATCH"}); onSaved(); }
+    try{await apiFetch(INVENTORY_API,`/api/Inventory/${item.cylinderId}/adjust?quantityChange=${val}`,{method:"PATCH"});onSaved();}
     catch(err){setError(err.message);}
     finally{setLoading(false);}
   }
 
-  return (
+  return(
     <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal">
         <div className="modal-handle"/>
         <h2>Adjust Stock</h2>
         <div style={{fontSize:13,color:"#2e5c2e",marginBottom:4}}>{item.brand} — {item.size}</div>
-        <div style={{fontSize:22,fontWeight:700,color:"#4caf50",marginBottom:20}}>Current: {item.quantityAvailable}</div>
+        <div style={{fontSize:28,fontWeight:700,color:"#4caf50",marginBottom:20}}>Current: {item.quantityAvailable}</div>
         {error&&<div className="error-box">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="field">
             <label>Change amount</label>
             <input type="number" value={change} onChange={e=>setChange(e.target.value)} placeholder="+10 to add, -5 to remove"/>
-            <div style={{fontSize:11,color:"#2e5c2e",marginTop:6}}>Positive = add stock · Negative = remove stock</div>
+            <div style={{fontSize:11,color:"#2e5c2e",marginTop:6}}>Positive = add · Negative = remove</div>
           </div>
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>Cancel</button>
@@ -84,30 +84,29 @@ export default function InventoryApp() {
   const [modal, setModal] = useState(null);
   const [selected, setSelected] = useState(null);
 
-  async function load() {
-    setLoading(true); setError("");
-    try {
-      const [inv,cyl] = await Promise.all([apiFetch(INVENTORY_API,"/api/Inventory"),apiFetch(CYLINDER_API,"/api/Cylinder/all")]);
-      setInventory(inv||[]); setCylinders(cyl||[]);
-    } catch(err){setError(err.message);}
+  async function load(){
+    setLoading(true);setError("");
+    try{
+      const [inv,cyl]=await Promise.all([apiFetch(INVENTORY_API,"/api/Inventory"),apiFetch(CYLINDER_API,"/api/Cylinder/all")]);
+      setInventory(inv||[]);setCylinders(cyl||[]);
+    }catch(err){setError(err.message);}
     finally{setLoading(false);}
   }
-
   useEffect(()=>{load();},[]);
 
-  async function handleDelete(cylinderId) {
+  async function handleDelete(cylinderId){
     if(!window.confirm("Delete inventory?"))return;
-    try { await apiFetch(INVENTORY_API,`/api/Inventory/${cylinderId}`,{method:"DELETE"}); setSuccess("Deleted."); setTimeout(()=>setSuccess(""),2500); load(); }
+    try{await apiFetch(INVENTORY_API,`/api/Inventory/${cylinderId}`,{method:"DELETE"});setSuccess("Deleted.");setTimeout(()=>setSuccess(""),2500);load();}
     catch(err){setError(err.message);}
   }
 
   function handleSaved(){setModal(null);setSelected(null);setSuccess("Saved.");setTimeout(()=>setSuccess(""),2500);load();}
 
-  const totalStock = inventory.reduce((s,i)=>s+Number(i.quantityAvailable),0);
-  const lowStock = inventory.filter(i=>Number(i.quantityAvailable)<=5);
-  const maxQty = Math.max(...inventory.map(i=>Number(i.quantityAvailable)),1);
+  const totalStock=inventory.reduce((s,i)=>s+Number(i.quantityAvailable),0);
+  const lowStock=inventory.filter(i=>Number(i.quantityAvailable)<=5);
+  const maxQty=Math.max(...inventory.map(i=>Number(i.quantityAvailable)),1);
 
-  return (
+  return(
     <>
       <style>{BASE_CSS}</style>
       <div className="page">
@@ -121,16 +120,15 @@ export default function InventoryApp() {
         {error&&<div className="error-box">{error}</div>}
         {success&&<div className="success-box">{success}</div>}
 
-        {isAdmin()&&(
-          <div className="topbar-actions">
-            <button className="btn btn-primary" onClick={()=>setModal("create")}>+ Create Inventory</button>
-            <button className="btn" onClick={load}>Refresh</button>
-          </div>
-        )}
+        <div className="topbar-actions">
+          {/* Admin only — create inventory */}
+          {can.createInventory()&&<button className="btn btn-primary" onClick={()=>setModal("create")}>+ Create Inventory</button>}
+          <button className="btn" onClick={load}>Refresh</button>
+        </div>
 
         {lowStock.length>0&&(
           <>
-            <div className="section-label">Low stock alerts</div>
+            <div className="section-label">⚠ Low stock alerts</div>
             {lowStock.map(item=>(
               <div key={item.cylinderId} className="card" style={{background:"#1a0a0a",borderColor:"#5c1f1f",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                 <div>
@@ -147,9 +145,9 @@ export default function InventoryApp() {
         {loading?<div className="loading"><div className="spinner"/> Loading...</div>
         :inventory.length===0?<div className="empty">No inventory records. Create one to get started.</div>
         :inventory.map(item=>{
-          const pct = Math.min((Number(item.quantityAvailable)/maxQty)*100,100);
-          const barClass = item.quantityAvailable<=5?"low":item.quantityAvailable<=20?"mid":"";
-          return (
+          const pct=Math.min((Number(item.quantityAvailable)/maxQty)*100,100);
+          const barClass=item.quantityAvailable<=5?"low":item.quantityAvailable<=20?"mid":"";
+          return(
             <div key={item.cylinderId} className="card">
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
                 <div>
@@ -157,16 +155,18 @@ export default function InventoryApp() {
                   <div style={{fontSize:12,color:"#2e5c2e",marginTop:2}}>{item.size} · {item.status}</div>
                 </div>
                 <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:24,fontWeight:700,color:item.quantityAvailable<=5?"#ef5350":item.quantityAvailable<=20?"#f59e0b":"#4caf50"}}>{item.quantityAvailable}</div>
+                  <div style={{fontSize:26,fontWeight:700,color:item.quantityAvailable<=5?"#ef5350":item.quantityAvailable<=20?"#f59e0b":"#4caf50"}}>{item.quantityAvailable}</div>
                   <div style={{fontSize:10,color:"#2e5c2e",textTransform:"uppercase",letterSpacing:"0.5px"}}>units</div>
                 </div>
               </div>
-              <div className="stock-bar-wrap" style={{width:"100%",marginRight:0,marginBottom:12}}>
+              <div className="stock-bar-wrap">
                 <div className={`stock-bar ${barClass}`} style={{width:`${pct}%`}}/>
               </div>
               <div style={{display:"flex",gap:8}}>
-                {isAdminOrStaff()&&<button className="btn btn-sm btn-primary" onClick={()=>{setSelected(item);setModal("adjust");}}>Adjust Stock</button>}
-                {isAdmin()&&<button className="btn btn-sm btn-danger" onClick={()=>handleDelete(item.cylinderId)}>Delete</button>}
+                {/* Admin + Staff can adjust */}
+                {can.adjustInventory()&&<button className="btn btn-sm btn-primary" onClick={()=>{setSelected(item);setModal("adjust");}}>Adjust Stock</button>}
+                {/* Admin only can delete */}
+                {can.deleteInventory()&&<button className="btn btn-sm btn-danger" onClick={()=>handleDelete(item.cylinderId)}>Delete</button>}
               </div>
             </div>
           );

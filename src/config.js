@@ -1,5 +1,4 @@
 // ─── API BASE URLS ────────────────────────────────────────────────────────────
-// Update these ports if your services change
 export const AUTH_API        = "https://localhost:7289";
 export const CYLINDER_API    = "https://localhost:7139";
 export const CUSTOMER_API    = "https://localhost:7261";
@@ -7,8 +6,7 @@ export const ORDER_API       = "https://localhost:7022";
 export const INVENTORY_API   = "https://localhost:7037";
 export const TRANSACTION_API = "https://localhost:7267";
 
-// ─── SHARED FETCH HELPER ──────────────────────────────────────────────────────
-// Use this in every App file instead of defining apiFetch locally
+// ─── SHARED FETCH ─────────────────────────────────────────────────────────────
 export async function apiFetch(base, path, options = {}) {
   const token = localStorage.getItem("access_token");
   const res = await fetch(`${base}${path}`, {
@@ -32,9 +30,46 @@ export async function apiFetch(base, path, options = {}) {
   }
 }
 
-// ─── SHARED AUTH HELPERS ──────────────────────────────────────────────────────
+// ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
 export function getToken()       { return localStorage.getItem("access_token"); }
 export function getRoles()       { try { return JSON.parse(localStorage.getItem("roles")) || []; } catch { return []; } }
 export function getUserEmail()   { try { return JSON.parse(localStorage.getItem("user"))?.email || ""; } catch { return ""; } }
+
+// Role checks
 export function isAdmin()        { return getRoles().includes("Admin"); }
+export function isStaff()        { return getRoles().includes("Staff") && !getRoles().includes("Admin"); }
 export function isAdminOrStaff() { return getRoles().some(r => ["Admin", "Staff"].includes(r)); }
+
+// Permission checks — use these throughout the app
+export const can = {
+  // Cylinders
+  addCylinder:    () => isAdmin(),
+  editCylinder:   () => isAdmin(),
+  deleteCylinder: () => isAdmin(),
+  updateDailySales: () => isAdminOrStaff(),
+
+  // Customers
+  addCustomer:    () => isAdminOrStaff(),
+  editCustomer:   () => isAdminOrStaff(),
+  deleteCustomer: () => isAdmin(),
+
+  // Orders
+  createOrder:    () => isAdminOrStaff(),
+  updateOrderStatus: () => isAdminOrStaff(),
+  deleteOrder:    () => isAdmin(),
+
+  // Inventory
+  createInventory: () => isAdmin(),
+  adjustInventory: () => isAdminOrStaff(),
+  deleteInventory: () => isAdmin(),
+
+  // Transactions
+  viewTransactions: () => isAdminOrStaff(),
+  deleteTransaction: () => isAdmin(),
+
+  // Revenue/financial data
+  viewRevenue:    () => isAdmin(),
+
+  // Auth
+  registerUser:   () => isAdmin(),
+};

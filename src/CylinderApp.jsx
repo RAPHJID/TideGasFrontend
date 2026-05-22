@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
-import { apiFetch, CYLINDER_API, getRoles, getUserEmail, isAdmin, isAdminOrStaff } from "./config";
+import { apiFetch, CYLINDER_API, getRoles, can } from "./config";
 import { BASE_CSS } from "./theme";
 
-function statusBadge(s) { const m={Available:"badge-green",InUse:"badge-amber",UnderRefill:"badge-blue",Damaged:"badge-red"}; return m[s]||"badge-muted"; }
-function condBadge(c) { const m={New:"badge-blue",Good:"badge-green",Fair:"badge-amber",Damaged:"badge-red"}; return m[c]||"badge-muted"; }
+function statusBadge(s){const m={Available:"badge-green",InUse:"badge-amber",UnderRefill:"badge-blue",Damaged:"badge-red"};return m[s]||"badge-muted";}
+function condBadge(c){const m={New:"badge-blue",Good:"badge-green",Fair:"badge-amber",Damaged:"badge-red"};return m[c]||"badge-muted";}
 
 function CylinderModal({ cylinder, onClose, onSaved }) {
   const isEdit = !!cylinder?.id;
-  const [form, setForm] = useState({ size: cylinder?.size||"", brand: cylinder?.brand||"", status: cylinder?.status||"Available", condition: cylinder?.condition||"Good" });
+  const [form, setForm] = useState({ size:cylinder?.size||"", brand:cylinder?.brand||"", status:cylinder?.status||"Available", condition:cylinder?.condition||"Good" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -87,31 +87,24 @@ export default function CylinderApp() {
   const [modal, setModal] = useState(null);
   const [selected, setSelected] = useState(null);
 
-  async function load() {
-    setLoading(true); setError("");
-    try { const d = await apiFetch(CYLINDER_API,"/api/Cylinder/all"); setCylinders(d||[]); }
-    catch(err){setError(err.message);}
-    finally{setLoading(false);}
-  }
-
+  async function load(){setLoading(true);setError("");try{const d=await apiFetch(CYLINDER_API,"/api/Cylinder/all");setCylinders(d||[]);}catch(err){setError(err.message);}finally{setLoading(false);}}
   useEffect(()=>{load();},[]);
 
-  async function handleDelete(id) {
+  async function handleDelete(id){
     if(!window.confirm("Delete this cylinder?"))return;
-    try { await apiFetch(CYLINDER_API,`/api/Cylinder/${id}`,{method:"DELETE"}); setSuccess("Deleted."); setTimeout(()=>setSuccess(""),2500); load(); }
+    try{await apiFetch(CYLINDER_API,`/api/Cylinder/${id}`,{method:"DELETE"});setSuccess("Deleted.");setTimeout(()=>setSuccess(""),2500);load();}
     catch(err){setError(err.message);}
   }
 
   function handleSaved(){setModal(null);setSelected(null);setSuccess("Saved.");setTimeout(()=>setSuccess(""),2500);load();}
 
   const filtered = tab==="all"?cylinders:cylinders.filter(c=>c.status===tab);
-  const stats = { total:cylinders.length, available:cylinders.filter(c=>c.status==="Available").length, inUse:cylinders.filter(c=>c.status==="InUse").length };
+  const stats = {total:cylinders.length,available:cylinders.filter(c=>c.status==="Available").length,inUse:cylinders.filter(c=>c.status==="InUse").length};
 
   return (
     <>
       <style>{BASE_CSS}</style>
       <div className="page">
-        {/* STATS */}
         <div className="stat-grid" style={{marginBottom:16}}>
           <div className="stat"><div className="stat-label">Total</div><div className="stat-value white">{stats.total}</div></div>
           <div className="stat"><div className="stat-label">Available</div><div className="stat-value">{stats.available}</div></div>
@@ -122,22 +115,18 @@ export default function CylinderApp() {
         {error&&<div className="error-box">{error}</div>}
         {success&&<div className="success-box">{success}</div>}
 
-        {/* ACTIONS */}
-        {isAdmin()&&(
-          <div className="topbar-actions">
-            <button className="btn btn-primary" onClick={()=>{setSelected(null);setModal("add");}}>+ Add Cylinder</button>
-            <button className="btn" onClick={load}>Refresh</button>
-          </div>
-        )}
+        <div className="topbar-actions">
+          {/* Admin only — add cylinder */}
+          {can.addCylinder()&&<button className="btn btn-primary" onClick={()=>{setSelected(null);setModal("add");}}>+ Add Cylinder</button>}
+          <button className="btn" onClick={load}>Refresh</button>
+        </div>
 
-        {/* TABS */}
         <div className="tabs">
           {["all","Available","InUse","UnderRefill","Damaged"].map(t=>(
             <button key={t} className={`tab-btn ${tab===t?"active":""}`} onClick={()=>setTab(t)}>{t==="all"?"All":t}</button>
           ))}
         </div>
 
-        {/* LIST */}
         {loading?<div className="loading"><div className="spinner"/> Loading...</div>
         :filtered.length===0?<div className="empty">No cylinders found</div>
         :filtered.map(c=>(
@@ -153,12 +142,12 @@ export default function CylinderApp() {
               <span className={`badge ${condBadge(c.condition)}`}>{c.condition}</span>
               <span style={{fontSize:12,color:"#2e5c2e"}}>Sold today: <span style={{color:"#c8e6c8"}}>{c.soldToday??0}</span></span>
             </div>
-            <div style={{display:"flex",gap:8}}>
-              {isAdminOrStaff()&&<button className="btn btn-sm" onClick={()=>{setSelected(c);setModal("sales");}}>Daily Sales</button>}
-              {isAdmin()&&<>
-                <button className="btn btn-sm" onClick={()=>{setSelected(c);setModal("edit");}}>Edit</button>
-                <button className="btn btn-sm btn-danger" onClick={()=>handleDelete(c.id)}>Delete</button>
-              </>}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {/* Admin + Staff */}
+              {can.updateDailySales()&&<button className="btn btn-sm" onClick={()=>{setSelected(c);setModal("sales");}}>Daily Sales</button>}
+              {/* Admin only */}
+              {can.editCylinder()&&<button className="btn btn-sm" onClick={()=>{setSelected(c);setModal("edit");}}>Edit</button>}
+              {can.deleteCylinder()&&<button className="btn btn-sm btn-danger" onClick={()=>handleDelete(c.id)}>Delete</button>}
             </div>
           </div>
         ))}

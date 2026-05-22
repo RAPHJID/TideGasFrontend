@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { apiFetch, TRANSACTION_API, isAdmin } from "./config";
+import { apiFetch, TRANSACTION_API, can } from "./config";
 import { BASE_CSS } from "./theme";
 
 function TransactionDetail({ tx, onClose, onDelete }) {
-  return (
+  return(
     <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal">
         <div className="modal-handle"/>
@@ -17,7 +17,8 @@ function TransactionDetail({ tx, onClose, onDelete }) {
         ))}
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Close</button>
-          {isAdmin()&&<button className="btn btn-danger" onClick={()=>{onClose();onDelete(tx.id);}}>Delete</button>}
+          {/* Admin only can delete */}
+          {can.deleteTransaction()&&<button className="btn btn-danger" onClick={()=>{onClose();onDelete(tx.id);}}>Delete</button>}
         </div>
       </div>
     </div>
@@ -33,43 +34,40 @@ export default function TransactionApp() {
   const [modal, setModal] = useState(null);
   const [selected, setSelected] = useState(null);
 
-  async function load() {
-    setLoading(true); setError("");
-    try { const d = await apiFetch(TRANSACTION_API,"/api/Transaction"); setTransactions(d||[]); }
-    catch(err){setError(err.message);}
-    finally{setLoading(false);}
-  }
-
+  async function load(){setLoading(true);setError("");try{const d=await apiFetch(TRANSACTION_API,"/api/Transaction");setTransactions(d||[]);}catch(err){setError(err.message);}finally{setLoading(false);}}
   useEffect(()=>{load();},[]);
 
-  async function handleDelete(id) {
+  async function handleDelete(id){
     if(!window.confirm("Delete this transaction?"))return;
-    try { await apiFetch(TRANSACTION_API,`/api/Transaction/${id}`,{method:"DELETE"}); setSuccess("Deleted."); setTimeout(()=>setSuccess(""),2500); load(); }
+    try{await apiFetch(TRANSACTION_API,`/api/Transaction/${id}`,{method:"DELETE"});setSuccess("Deleted.");setTimeout(()=>setSuccess(""),2500);load();}
     catch(err){setError(err.message);}
   }
 
-  const filtered = transactions.filter(t=>
+  const filtered=transactions.filter(t=>
     t.customerName?.toLowerCase().includes(search.toLowerCase())||
     t.cylinderName?.toLowerCase().includes(search.toLowerCase())||
     t.id?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalRevenue = transactions.reduce((s,t)=>s+Number(t.amount),0);
-  const todayRevenue = transactions.filter(t=>new Date(t.date).toDateString()===new Date().toDateString()).reduce((s,t)=>s+Number(t.amount),0);
+  const totalRevenue=transactions.reduce((s,t)=>s+Number(t.amount),0);
+  const todayRevenue=transactions.filter(t=>new Date(t.date).toDateString()===new Date().toDateString()).reduce((s,t)=>s+Number(t.amount),0);
 
-  return (
+  return(
     <>
       <style>{BASE_CSS}</style>
       <div className="page">
+        {/* Revenue visible to all staff and admin on this page */}
         <div className="stat-grid" style={{marginBottom:16}}>
           <div className="stat"><div className="stat-label">Total</div><div className="stat-value white">{transactions.length}</div></div>
-          <div className="stat"><div className="stat-label">Today revenue</div><div className="stat-value sm">QAR {todayRevenue.toFixed(0)}</div></div>
+          <div className="stat"><div className="stat-label">Today</div><div className="stat-value sm">QAR {todayRevenue.toFixed(0)}</div></div>
         </div>
 
-        <div className="card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <div style={{fontSize:11,color:"#2e5c2e",textTransform:"uppercase",letterSpacing:"1px"}}>All time revenue</div>
-          <div style={{fontSize:22,fontWeight:700,color:"#4caf50"}}>QAR {totalRevenue.toFixed(2)}</div>
-        </div>
+        {can.viewRevenue()&&(
+          <div className="card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{fontSize:11,color:"#2e5c2e",textTransform:"uppercase",letterSpacing:"1px"}}>All time revenue</div>
+            <div style={{fontSize:22,fontWeight:700,color:"#4caf50"}}>QAR {totalRevenue.toFixed(2)}</div>
+          </div>
+        )}
 
         <div className="info-box">Transactions are created automatically when an order is placed.</div>
 
@@ -85,7 +83,7 @@ export default function TransactionApp() {
         </div>
 
         {loading?<div className="loading"><div className="spinner"/> Loading...</div>
-        :filtered.length===0?<div className="empty">{search?"No results found":"No transactions yet. Create an order to generate one."}</div>
+        :filtered.length===0?<div className="empty">{search?"No results found":"No transactions yet."}</div>
         :filtered.map(t=>(
           <div key={t.id} className="card" style={{cursor:"pointer"}} onClick={()=>{setSelected(t);setModal("detail");}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>

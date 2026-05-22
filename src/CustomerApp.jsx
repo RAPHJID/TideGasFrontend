@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { apiFetch, CUSTOMER_API, isAdmin, isAdminOrStaff } from "./config";
+import { apiFetch, CUSTOMER_API, can } from "./config";
 import { BASE_CSS } from "./theme";
 
 function initials(name){return name.split(" ").map(n=>n[0]).join("").toUpperCase().slice(0,2);}
@@ -11,19 +11,19 @@ function CustomerModal({ customer, onClose, onSaved }) {
   const [error, setError] = useState("");
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
 
-  async function handleSubmit(e) {
-    e.preventDefault(); setError("");
+  async function handleSubmit(e){
+    e.preventDefault();setError("");
     if(!form.fullName||!form.email){setError("Name and email required.");return;}
     setLoading(true);
-    try {
-      if(isEdit) await apiFetch(CUSTOMER_API,`/api/customer/${customer.id}`,{method:"PUT",body:JSON.stringify(form)});
+    try{
+      if(isEdit)await apiFetch(CUSTOMER_API,`/api/customer/${customer.id}`,{method:"PUT",body:JSON.stringify(form)});
       else await apiFetch(CUSTOMER_API,"/api/customer",{method:"POST",body:JSON.stringify(form)});
       onSaved();
-    } catch(err){setError(err.message);}
+    }catch(err){setError(err.message);}
     finally{setLoading(false);}
   }
 
-  return (
+  return(
     <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal">
         <div className="modal-handle"/>
@@ -45,13 +45,13 @@ function CustomerModal({ customer, onClose, onSaved }) {
 }
 
 function CustomerDetail({ customer, onClose, onEdit, onDelete }) {
-  return (
+  return(
     <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal">
         <div className="modal-handle"/>
         <h2>Customer</h2>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-          <div style={{width:52,height:52,borderRadius:"50%",background:"#1a2e1a",border:"1px solid #2e5c2e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,color:"#4caf50"}}>{initials(customer.fullName)}</div>
+          <div style={{width:52,height:52,borderRadius:"50%",background:"#1a2e1a",border:"1px solid #2e5c2e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,color:"#4caf50",flexShrink:0}}>{initials(customer.fullName)}</div>
           <div>
             <div style={{fontSize:18,fontWeight:700,color:"#c8e6c8"}}>{customer.fullName}</div>
             <div style={{fontSize:12,color:"#2e5c2e"}}>{customer.email}</div>
@@ -65,10 +65,10 @@ function CustomerDetail({ customer, onClose, onEdit, onDelete }) {
         ))}
         <div className="modal-actions" style={{marginTop:20}}>
           <button className="btn" onClick={onClose}>Close</button>
-          {isAdminOrStaff()&&<>
-            <button className="btn btn-primary" onClick={()=>{onClose();onEdit(customer);}}>Edit</button>
-            <button className="btn btn-danger" onClick={()=>{onClose();onDelete(customer.id);}}>Delete</button>
-          </>}
+          {/* Admin + Staff can edit */}
+          {can.editCustomer()&&<button className="btn btn-primary" onClick={()=>{onClose();onEdit(customer);}}>Edit</button>}
+          {/* Admin only can delete */}
+          {can.deleteCustomer()&&<button className="btn btn-danger" onClick={()=>{onClose();onDelete(customer.id);}}>Delete</button>}
         </div>
       </div>
     </div>
@@ -84,18 +84,12 @@ export default function CustomerApp() {
   const [modal, setModal] = useState(null);
   const [selected, setSelected] = useState(null);
 
-  async function load() {
-    setLoading(true); setError("");
-    try { const d = await apiFetch(CUSTOMER_API,"/api/customer"); setCustomers(d||[]); }
-    catch(err){setError(err.message);}
-    finally{setLoading(false);}
-  }
-
+  async function load(){setLoading(true);setError("");try{const d=await apiFetch(CUSTOMER_API,"/api/customer");setCustomers(d||[]);}catch(err){setError(err.message);}finally{setLoading(false);}}
   useEffect(()=>{load();},[]);
 
-  async function handleDelete(id) {
+  async function handleDelete(id){
     if(!window.confirm("Delete this customer?"))return;
-    try { await apiFetch(CUSTOMER_API,`/api/customer/${id}`,{method:"DELETE"}); setSuccess("Deleted."); setTimeout(()=>setSuccess(""),2500); load(); }
+    try{await apiFetch(CUSTOMER_API,`/api/customer/${id}`,{method:"DELETE"});setSuccess("Deleted.");setTimeout(()=>setSuccess(""),2500);load();}
     catch(err){setError(err.message);}
   }
 
@@ -107,24 +101,23 @@ export default function CustomerApp() {
     c.phoneNumber?.includes(search)
   );
 
-  return (
+  return(
     <>
       <style>{BASE_CSS}</style>
       <div className="page">
         <div className="stat-grid" style={{marginBottom:16}}>
           <div className="stat"><div className="stat-label">Total customers</div><div className="stat-value white">{customers.length}</div></div>
-          <div className="stat"><div className="stat-label">Filtered</div><div className="stat-value white">{filtered.length}</div></div>
+          <div className="stat"><div className="stat-label">Showing</div><div className="stat-value white">{filtered.length}</div></div>
         </div>
 
         {error&&<div className="error-box">{error}</div>}
         {success&&<div className="success-box">{success}</div>}
 
-        {isAdminOrStaff()&&(
-          <div className="topbar-actions">
-            <button className="btn btn-primary" onClick={()=>{setSelected(null);setModal("add");}}>+ Add Customer</button>
-            <button className="btn" onClick={load}>Refresh</button>
-          </div>
-        )}
+        <div className="topbar-actions">
+          {/* Admin + Staff can add */}
+          {can.addCustomer()&&<button className="btn btn-primary" onClick={()=>{setSelected(null);setModal("add");}}>+ Add Customer</button>}
+          <button className="btn" onClick={load}>Refresh</button>
+        </div>
 
         <div className="search-wrap">
           <input placeholder="Search name, email, phone..." value={search} onChange={e=>setSearch(e.target.value)}/>

@@ -1,114 +1,123 @@
 import { useState } from "react";
-import AuthComponent from "./AuthComponent";
-import Dashboard from "./Dashboard";
-import CylinderApp from "./CylinderApp";
-import CustomerApp from "./CustomerApp";
-import OrderApp from "./OrderApp";
-import InventoryApp from "./InventoryApp";
-import TransactionApp from "./TransactionApp";
-import { BASE_CSS } from "./theme";
+import { AUTH_API } from "./config";
 
-const navCss = `
-  ${BASE_CSS}
-  .nav-bottom {
-    position: fixed; bottom: 0; left: 0; right: 0; background: #0a0f0a;
-    border-top: 1px solid #1a2e1a; display: flex; z-index: 200;
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  .nav-tab {
-    flex: 1; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; padding: 10px 4px; border: none;
-    background: none; cursor: pointer; font-family: inherit; gap: 4px;
-    color: #2e5c2e; transition: color 0.15s;
-  }
-  .nav-tab.active { color: #4caf50; }
-  .nav-tab svg { width: 22px; height: 22px; }
-  .nav-tab span { font-size: 9px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; }
-  .nav-top {
-    position: fixed; top: 0; left: 0; right: 0; background: #0a0f0a;
-    border-bottom: 1px solid #1a2e1a; display: flex; align-items: center;
-    padding: 0 16px; height: 52px; z-index: 200;
-  }
-  .nav-top-title { font-size: 15px; font-weight: 700; color: #4caf50; letter-spacing: 2px; text-transform: uppercase; }
-  .page-wrap { padding-top: 52px; padding-bottom: 72px; min-height: 100vh; background: #0a0f0a; }
-  .more-wrap { padding: 16px; }
-  .more-card { background: #0d150d; border: 1px solid #1a2e1a; border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
-  .more-row { display: flex; justify-content: space-between; align-items: center; padding: 18px 16px; cursor: pointer; background: none; border: none; border-bottom: 1px solid #111811; width: 100%; font-family: inherit; text-align: left; }
-  .more-row:last-child { border-bottom: none; }
-  .more-row-label { font-size: 15px; color: #c8e6c8; font-weight: 500; }
-  .more-row-desc { font-size: 11px; color: #2e5c2e; margin-top: 3px; }
-  .more-logout { color: #ef5350 !important; }
+const css = `
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Mono', 'Menlo', 'Courier New', monospace; background: #0a0f0a; color: #c8e6c8; }
+  .auth-wrap { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 2rem 1.5rem; max-width: 420px; margin: 0 auto; }
+  .auth-logo { margin-bottom: 2rem; }
+  .auth-logo-title { font-size: 28px; font-weight: 700; color: #4caf50; letter-spacing: 3px; text-transform: uppercase; }
+  .auth-logo-sub { font-size: 11px; color: #2e5c2e; letter-spacing: 2px; text-transform: uppercase; margin-top: 4px; }
+  .cursor { display: inline-block; width: 10px; height: 20px; background: #4caf50; animation: blink 1s step-end infinite; vertical-align: middle; margin-left: 3px; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .auth-tabs { display: flex; margin-bottom: 2rem; border: 1px solid #1a2e1a; border-radius: 10px; overflow: hidden; }
+  .auth-tab { flex: 1; padding: 12px; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; border: none; cursor: pointer; font-family: inherit; background: #0d150d; color: #2e5c2e; transition: all 0.15s; }
+  .auth-tab.active { background: #1a2e1a; color: #4caf50; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 10px; color: #2e5c2e; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; }
+  .field input { width: 100%; padding: 14px; font-size: 15px; border: 1px solid #1a2e1a; border-radius: 10px; outline: none; font-family: inherit; color: #c8e6c8; background: #0d150d; transition: border-color 0.15s; }
+  .field input:focus { border-color: #4caf50; }
+  .field input::placeholder { color: #2e5c2e; }
+  .btn { width: 100%; padding: 15px; font-size: 13px; font-weight: 700; border-radius: 10px; border: 1px solid #4caf50; cursor: pointer; font-family: inherit; background: #1a2e1a; color: #4caf50; letter-spacing: 1px; text-transform: uppercase; margin-top: 8px; transition: background 0.15s; }
+  .btn:hover { background: #1e3a1e; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .error-box { background: #1a0a0a; border: 1px solid #5c1f1f; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #ef5350; margin-bottom: 14px; }
+  .success-box { background: #0d1a0d; border: 1px solid #1a3d1a; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #4caf50; margin-bottom: 14px; }
+  .hint { font-size: 12px; color: #2e5c2e; text-align: center; margin-top: 20px; }
+  .hint button { color: #4caf50; background: none; border: none; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+  .divider { border-top: 1px solid #1a2e1a; margin: 20px 0; }
+  .register-wrap { padding: 2rem 1.5rem; max-width: 420px; margin: 0 auto; }
 `;
 
-const tabs = [
-  { key: "dashboard", label: "Home", icon: (a) => <svg viewBox="0 0 24 24" fill="none" stroke={a?"#4caf50":"#2e5c2e"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> },
-  { key: "cylinders", label: "Cylinders", icon: (a) => <svg viewBox="0 0 24 24" fill="none" stroke={a?"#4caf50":"#2e5c2e"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="6" rx="7" ry="2.5"/><path d="M5 6v12c0 1.38 3.13 2.5 7 2.5s7-1.12 7-2.5V6"/></svg> },
-  { key: "customers", label: "Customers", icon: (a) => <svg viewBox="0 0 24 24" fill="none" stroke={a?"#4caf50":"#2e5c2e"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg> },
-  { key: "orders", label: "Orders", icon: (a) => <svg viewBox="0 0 24 24" fill="none" stroke={a?"#4caf50":"#2e5c2e"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg> },
-  { key: "more", label: "More", icon: (a) => <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="5" r="1.5" fill={a?"#4caf50":"#2e5c2e"}/><circle cx="12" cy="12" r="1.5" fill={a?"#4caf50":"#2e5c2e"}/><circle cx="12" cy="19" r="1.5" fill={a?"#4caf50":"#2e5c2e"}/></svg> },
-];
+// mode: "full" (login + register tabs) | "register-only" (just register form, for admin use)
+export default function AuthComponent({ onAuthSuccess, mode = "full" }) {
+  const [tab, setTab] = useState(mode === "register-only" ? "register" : "login");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-const titles = { dashboard: "TIDEGAS", cylinders: "CYLINDERS", customers: "CUSTOMERS", orders: "ORDERS", inventory: "INVENTORY", transactions: "TRANSACTIONS", more: "MORE" };
+  async function handleLogin(e) {
+    e.preventDefault(); setError("");
+    const email = e.target.email.value;
+    const password = e.target.password.value;
+    if (!email || !password) { setError("Please fill in all fields."); return; }
+    setLoading(true);
+    try {
+      const res = await fetch(`${AUTH_API}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!res.ok) throw new Error(data.message || "Invalid credentials.");
+      localStorage.setItem("access_token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("roles", JSON.stringify(data.roles));
+      onAuthSuccess?.(data);
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  }
 
-function MoreMenu({ onNavigate, onLogout }) {
-  const items = [
-    { key: "inventory", label: "Inventory", desc: "Stock levels & adjustments" },
-    { key: "transactions", label: "Transactions", desc: "Revenue & payment history" },
-  ];
-  return (
-    <div className="more-wrap">
-      <div className="more-card">
-        {items.map(item => (
-          <button key={item.key} className="more-row" onClick={() => onNavigate(item.key)}>
-            <div>
-              <div className="more-row-label">{item.label}</div>
-              <div className="more-row-desc">{item.desc}</div>
-            </div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2e5c2e" strokeWidth="2" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
-        ))}
-      </div>
-      <div className="more-card">
-        <button className="more-row" onClick={onLogout}>
-          <span className="more-row-label more-logout">Sign out</span>
-        </button>
-      </div>
-    </div>
-  );
-}
+  async function handleRegister(e) {
+    e.preventDefault(); setError(""); setSuccess("");
+    const fullName = e.target.fullName.value;
+    const email = e.target.email.value;
+    const password = e.target.password.value;
+    const confirm = e.target.confirm.value;
+    if (!fullName || !email || !password || !confirm) { setError("Please fill in all fields."); return; }
+    if (password !== confirm) { setError("Passwords do not match."); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    setLoading(true);
+    try {
+      const res = await fetch(`${AUTH_API}/api/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fullName, email, password }) });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!res.ok) throw new Error(data.message || (data.errors ? data.errors.join(" ") : null) || "Registration failed.");
+      setSuccess(data.message || "Account created successfully.");
+      if (mode === "register-only") {
+        setTimeout(() => onAuthSuccess?.(), 1500);
+      } else {
+        setTimeout(() => { setTab("login"); setSuccess(""); }, 1800);
+      }
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  }
 
-export default function App() {
-  const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem("access_token"));
-  const [page, setPage] = useState("dashboard");
+  // Register-only mode (admin creating new users from inside app)
+  if (mode === "register-only") {
+    return (
+      <>
+        <style>{css}</style>
+        <div className="register-wrap">
+          {error && <div className="error-box">{error}</div>}
+          {success && <div className="success-box">{success}</div>}
+          <form onSubmit={handleRegister} noValidate>
+            <div className="field"><label>Full name</label><input name="fullName" type="text" placeholder="Staff Member Name" /></div>
+            <div className="field"><label>Email</label><input name="email" type="email" placeholder="staff@tidegas.com" /></div>
+            <div className="field"><label>Password</label><input name="password" type="password" placeholder="Min. 6 characters" /></div>
+            <div className="field"><label>Confirm password</label><input name="confirm" type="password" placeholder="••••••••" /></div>
+            <button className="btn" type="submit" disabled={loading}>{loading ? "CREATING..." : "CREATE ACCOUNT"}</button>
+          </form>
+        </div>
+      </>
+    );
+  }
 
-  function handleLogout() { localStorage.clear(); setLoggedIn(false); setPage("dashboard"); }
-
-  if (!loggedIn) return <AuthComponent onAuthSuccess={() => setLoggedIn(true)} />;
-
-  const activeTab = ["dashboard", "cylinders", "customers", "orders"].includes(page) ? page : "more";
-
+  // Full mode — login screen (staff/admin can't register themselves, admin does it from More menu)
   return (
     <>
-      <style>{navCss}</style>
-      <div className="nav-top">
-        <span className="nav-top-title">{titles[page]}<span className="cursor-blink" /></span>
-      </div>
-      <div className="page-wrap">
-        {page === "dashboard"    && <Dashboard      onLogout={handleLogout} onNavigate={setPage} />}
-        {page === "cylinders"    && <CylinderApp    onLogout={handleLogout} />}
-        {page === "customers"    && <CustomerApp     onLogout={handleLogout} />}
-        {page === "orders"       && <OrderApp        onLogout={handleLogout} />}
-        {page === "inventory"    && <InventoryApp    onLogout={handleLogout} />}
-        {page === "transactions" && <TransactionApp  onLogout={handleLogout} />}
-        {page === "more"         && <MoreMenu onNavigate={setPage} onLogout={handleLogout} />}
-      </div>
-      <div className="nav-bottom">
-        {tabs.map(tab => (
-          <button key={tab.key} className={`nav-tab ${activeTab === tab.key ? "active" : ""}`} onClick={() => setPage(tab.key)}>
-            {tab.icon(activeTab === tab.key)}
-            <span>{tab.label}</span>
-          </button>
-        ))}
+      <style>{css}</style>
+      <div className="auth-wrap">
+        <div className="auth-logo">
+          <div className="auth-logo-title">TideGas<span className="cursor" /></div>
+          <div className="auth-logo-sub">Operations Dashboard</div>
+        </div>
+
+        {error && <div className="error-box">{error}</div>}
+        {success && <div className="success-box">{success}</div>}
+
+        <form onSubmit={handleLogin} noValidate>
+          <div className="field"><label>Email</label><input name="email" type="email" placeholder="admin@tidegas.com" /></div>
+          <div className="field"><label>Password</label><input name="password" type="password" placeholder="••••••••" /></div>
+          <button className="btn" type="submit" disabled={loading}>{loading ? "SIGNING IN..." : "SIGN IN"}</button>
+        </form>
       </div>
     </>
   );
