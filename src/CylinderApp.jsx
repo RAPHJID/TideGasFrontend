@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { apiFetch, CYLINDER_API, getRoles, can } from "./config";
+import { apiFetch, CYLINDER_API, can } from "./config";
 import { BASE_CSS } from "./theme";
 
 function statusBadge(s){const m={Available:"badge-green",InUse:"badge-amber",UnderRefill:"badge-blue",Damaged:"badge-red"};return m[s]||"badge-muted";}
@@ -84,6 +84,7 @@ export default function CylinderApp() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [tab, setTab] = useState("all");
+  const [search, setSearch] = useState("");  // 👈 search state
   const [modal, setModal] = useState(null);
   const [selected, setSelected] = useState(null);
 
@@ -98,8 +99,21 @@ export default function CylinderApp() {
 
   function handleSaved(){setModal(null);setSelected(null);setSuccess("Saved.");setTimeout(()=>setSuccess(""),2500);load();}
 
-  const filtered = tab==="all"?cylinders:cylinders.filter(c=>c.status===tab);
-  const stats = {total:cylinders.length,available:cylinders.filter(c=>c.status==="Available").length,inUse:cylinders.filter(c=>c.status==="InUse").length};
+  // 👈 filter by tab AND search
+  const filtered = cylinders
+    .filter(c => tab==="all" || c.status===tab)
+    .filter(c =>
+      c.brand?.toLowerCase().includes(search.toLowerCase()) ||
+      c.size?.toLowerCase().includes(search.toLowerCase()) ||
+      c.condition?.toLowerCase().includes(search.toLowerCase()) ||
+      c.status?.toLowerCase().includes(search.toLowerCase())
+    );
+
+  const stats = {
+    total: cylinders.length,
+    available: cylinders.filter(c=>c.status==="Available").length,
+    inUse: cylinders.filter(c=>c.status==="InUse").length,
+  };
 
   return (
     <>
@@ -116,9 +130,17 @@ export default function CylinderApp() {
         {success&&<div className="success-box">{success}</div>}
 
         <div className="topbar-actions">
-          {/* Admin only — add cylinder */}
           {can.addCylinder()&&<button className="btn btn-primary" onClick={()=>{setSelected(null);setModal("add");}}>+ Add Cylinder</button>}
           <button className="btn" onClick={load}>Refresh</button>
+        </div>
+
+        {/* 👈 search bar */}
+        <div className="search-wrap">
+          <input
+            placeholder="Search brand, size, status..."
+            value={search}
+            onChange={e=>setSearch(e.target.value)}
+          />
         </div>
 
         <div className="tabs">
@@ -128,7 +150,7 @@ export default function CylinderApp() {
         </div>
 
         {loading?<div className="loading"><div className="spinner"/> Loading...</div>
-        :filtered.length===0?<div className="empty">No cylinders found</div>
+        :filtered.length===0?<div className="empty">{search?"No cylinders match your search":"No cylinders found"}</div>
         :filtered.map(c=>(
           <div key={c.id} className="card">
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
@@ -143,9 +165,7 @@ export default function CylinderApp() {
               <span style={{fontSize:12,color:"#2e5c2e"}}>Sold today: <span style={{color:"#c8e6c8"}}>{c.soldToday??0}</span></span>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              {/* Admin + Staff */}
               {can.updateDailySales()&&<button className="btn btn-sm" onClick={()=>{setSelected(c);setModal("sales");}}>Daily Sales</button>}
-              {/* Admin only */}
               {can.editCylinder()&&<button className="btn btn-sm" onClick={()=>{setSelected(c);setModal("edit");}}>Edit</button>}
               {can.deleteCylinder()&&<button className="btn btn-sm btn-danger" onClick={()=>handleDelete(c.id)}>Delete</button>}
             </div>
