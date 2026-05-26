@@ -17,6 +17,12 @@ export async function apiFetch(base, path, options = {}) {
       ...options.headers,
     },
   });
+  if (res.status === 401) {
+    localStorage.clear();
+    window.dispatchEvent(new Event("session-expired"));
+    throw new Error("Session expired. Please sign in again.");
+  }
+
   if (res.status === 204) return null;
   const text = await res.text();
   if (!text) return null;

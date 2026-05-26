@@ -8,6 +8,7 @@ import InventoryApp from "./InventoryApp";
 import TransactionApp from "./TransactionApp";
 import { BASE_CSS } from "./theme";
 import { getRoles, isAdmin, isStaff, can } from "./config";
+import { useState, useEffect } from "react";
 
 const navCss = `
   ${BASE_CSS}
@@ -80,6 +81,15 @@ export default function App() {
   const roles = getRoles();
   const roleLabel = isAdmin() ? "Admin" : "Staff";
   const roleClass = isAdmin() ? "admin" : "staff";
+
+  useEffect(() => {
+  function handleExpiry() {
+    setLoggedIn(false);
+    setPage("dashboard");
+  }
+  window.addEventListener("session-expired", handleExpiry);
+  return () => window.removeEventListener("session-expired", handleExpiry);
+}, []);
 
   function handleLogout() { localStorage.clear(); setLoggedIn(false); setPage("dashboard"); }
 
